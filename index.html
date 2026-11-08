@@ -53,7 +53,7 @@ input,select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-ra
 const E = (typeof module !== 'undefined' && module.exports) ? require('ethers') : root.ethers;
 const C = {
   chainId: 99901,
-  rpcs: ['https://rpc.asphodelhq.com', 'https://rpc-live.elysp.com', 'https://rpc-live.boxa.club'],
+  rpcs: ['https://rpc.asphodelhq.com', 'https://rpc-live.elysp.com'],
   PM: '0xe2e105d3f7209a9da11f83ccf3e7398a753823f1',
   POSM: '0x1d1c51b9d07fd27d36412a2b66cc23d19eb3e518',
   PERMIT2: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
@@ -75,7 +75,7 @@ const POSM_ABI = [
 ];
 const PMA = ['function extsload(bytes32) view returns (bytes32)', 'function extsload(bytes32,uint256) view returns (bytes32[])'];
 const ERC20 = ['function balanceOf(address) view returns (uint256)', 'function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)'];
-const P2 = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,uint160,uint48)'];
+const P2 = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,address,uint160,uint48)'];
 const A = { INCREASE: 0x00, DECREASE: 0x01, MINT: 0x02, BURN: 0x03, SETTLE_PAIR: 0x0d, TAKE_PAIR: 0x11, CLOSE_CURRENCY: 0x12, SWEEP: 0x14 };
 const KT = 'tuple(address,address,uint24,int24,address)';
 
@@ -219,7 +219,7 @@ async function connect(){
   const eth=window.ethereum;if(!eth){alert('没检测到钱包。请在钱包 App 内置浏览器（或装了 Rabby/MetaMask 的电脑浏览器）里打开本页。');return}
   const [a]=await eth.request({method:'eth_requestAccounts'});
   try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16)}]})}catch(e){
-    await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:C.rpcs}]})}
+    await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[C.rpcs[0]]}]})}
   const bp=new E.BrowserProvider(eth);S.signer=await bp.getSigner();S.acct=E.getAddress(a);
   $('acct').textContent=S.acct;log('已连接 '+S.acct);eth.on&&eth.on('accountsChanged',()=>location.reload());
   await refreshTop();await refreshPositions();
