@@ -31,7 +31,7 @@ input,select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-ra
 <div class="card"><h2>建仓</h2>
 <div class="row">预算 <input id="iBud" type="number" step="any" placeholder="美元"> 美元
 <span class="mut">（一半 HYPE 一半 KNTQ，按区间实际比例算）</span></div>
-<div class="row" style="margin-top:6px">区间 下 <input id="iLo" type="number" value="20" step="any" style="width:70px">% 上 <input id="iHi" type="number" value="20" step="any" style="width:70px">%
+<div class="row" style="margin-top:6px">KNTQ 价格区间 下 <input id="iLo" type="number" value="20" step="any" style="width:70px">% 上 <input id="iHi" type="number" value="20" step="any" style="width:70px">%
 <button class="alt" data-r="10">±10%</button><button class="alt" data-r="20">±20%</button><button class="alt" data-r="50">±50%</button><button class="alt" data-r="full">全区间</button></div>
 <div class="row" style="margin-top:6px">滑点 <input id="iSlip" type="number" value="1" step="any" style="width:60px">%
 <button id="bCalc" class="alt">计算</button><button id="bMint" disabled>预览并建仓</button></div>
@@ -224,7 +224,7 @@ async function connect(){
   $('acct').textContent=S.acct;log('已连接 '+S.acct);eth.on&&eth.on('accountsChanged',()=>location.reload());
   await refreshTop();await refreshPositions();
 }
-function range(){const lo=$('iLo').value,hi=$('iHi').value;if(+lo>=99.99)return{tl:-887200,tu:887200};return LP.rangeTicks(S.pool.tick,Math.min(+lo,99.9),+hi)}
+function range(){const lo=+$('iLo').value,hi=+$('iHi').value;if(lo>=99.99)return{tl:-887200,tu:887200};const lg=Math.log(1.0001),t=S.pool.tick,TS=LP.C.TS;/* KNTQ price in HYPE = 1/1.0001^tick: price down lo% -> higher tick */const tu=Math.ceil((t-Math.log(1-Math.min(lo,99.9)/100)/lg)/TS)*TS,tl=Math.floor((t-Math.log(1+hi/100)/lg)/TS)*TS;const r={tl:Math.max(tl,-887200),tu:Math.min(tu,887200)};log('区间 KNTQ 价格 '+(1/Math.pow(1.0001,r.tu)).toPrecision(4)+' ~ '+(1/Math.pow(1.0001,r.tl)).toPrecision(4)+' HYPE');return r}
 async function calc(){
   await refreshTop();if(!S.hypeUsd){alert('拿不到 HYPE 美元价');return}
   const bud=+$('iBud').value;if(!(bud>0)){alert('填预算');return}
