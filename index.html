@@ -87,6 +87,15 @@ const slotAdd = (s, n) => E.toBeHex(BigInt(s) + BigInt(n), 32);
 const stateSlot = () => E.keccak256(ab.encode(['bytes32', 'uint256'], [C.POOL_ID, 6]));
 const s24 = v => { v = Number(v & 0xffffffn); return v >= 0x800000 ? v - 0x1000000 : v; };
 
+function mcRunner(p) { // batches eth_calls in one tick into a single Multicall3 aggregate3
+  const MC = new E.Contract('0xcA11bde05977b3631167028862bE2a173976CA11', ['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[])'], p);
+  let q = [], t = null;
+  const flush = async () => { const b = q; q = []; t = null;
+    try { const r = await MC.aggregate3(b.map(x => ({ target: x.tx.to, allowFailure: true, callData: x.tx.data })));
+      r.forEach((x, i) => x.success ? b[i].res(x.returnData) : b[i].rej(Object.assign(new Error('call reverted'), { data: x.returnData }))); }
+    catch (e) { b.forEach(x => x.rej(e)); } };
+  return { provider: p, call: tx => new Promise((res, rej) => { q.push({ tx, res, rej }); if (!t) t = setTimeout(flush, 5); }) };
+}
 async function readPool(p) {
   const pm = new E.Contract(C.PM, PMA, p); const ss = stateSlot();
   const w = await pm['extsload(bytes32,uint256)'](ss, 4);
@@ -193,7 +202,7 @@ async function scanPositions(p, addr, blocks = 200000, step = 9999, onProgress) 
   }
   return [...ids];
 }
-const api = { C, KEY, A, E, provider, withRpc, readPool, readPosition, sqrtAt, amountsForLiquidity, liquidityFor, rangeTicks, buildMint, buildIncrease, buildCollect, buildRemove, balances, buildApproveP2, buildP2Approve, scanPositions, POSM_ABI };
+const api = { mcRunner, C, KEY, A, E, provider, withRpc, readPool, readPosition, sqrtAt, amountsForLiquidity, liquidityFor, rangeTicks, buildMint, buildIncrease, buildCollect, buildRemove, balances, buildApproveP2, buildP2Approve, scanPositions, POSM_ABI };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LP = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -267,7 +276,8 @@ function samples(id,feeUsd){const k='lp_s_'+id;let s=store.get(k,[]);const now=D
 async function refreshPositions(){try{await _refreshPositions()}catch(e){log('仓位刷新出错：'+(e.shortMessage||e.message),'bad')}}
 async function _refreshPositions(){
   if(!S.pool)await refreshTop();if(!S.pool)throw new Error('读不到池子');$('positions').innerHTML='<p class="mut">读取中…</p>';const ids=store.get('lp_ids',[]);const hu=S.hypeUsd||0,kp=S.pool.hypePerKntq;const out=[];
-  for(const id of ids){try{const p=await rpc(pr=>LP.readPosition(pr,BigInt(id),S.pool));if(!p.isOurPool)continue;
+  const rs=await rpc(async pr=>{const mc=LP.mcRunner(pr);const r=await Promise.all(ids.map(id=>LP.readPosition(mc,BigInt(id),S.pool).then(p=>({p}),e=>({e}))));if(r.length&&r.every(x=>x.e))throw r[0].e;return r});
+  for(let i=0;i<ids.length;i++){const id=ids[i];try{if(rs[i].e)throw rs[i].e;const p=rs[i].p;if(!p.isOurPool)continue;
     const val=(Number(E.formatEther(p.amount0))+Number(E.formatEther(p.amount1))*kp)*hu;
     const fee=(Number(E.formatEther(p.fee0))+Number(E.formatEther(p.fee1))*kp)*hu;
     const s=samples(id,fee);let apr=null,ps=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&fee>=o[1]){ps=(fee-o[1])/((Date.now()-o[0])/1000);apr=val>0?ps*31536000/val*100:null}
@@ -294,5 +304,5 @@ $('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
 $('iBud').oninput=()=>{S.plan=null;$('bMint').disabled=true};
 (async()=>{await hypePrice();await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));refreshPositions();
-  setInterval(async()=>{await hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{})},15000)})();
+  setInterval(async()=>{await hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{})},30000)})();
 </script></body></html>
