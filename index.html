@@ -219,7 +219,7 @@ async function connect(){
   const eth=window.ethereum;if(!eth){alert('没检测到钱包。请在钱包 App 内置浏览器（或装了 Rabby/MetaMask 的电脑浏览器）里打开本页。');return}
   const [a]=await eth.request({method:'eth_requestAccounts'});
   try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16)}]})}catch(e){
-    await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[C.rpcs[0]]}]})}
+    await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:C.rpcs}]})}
   const bp=new E.BrowserProvider(eth);S.signer=await bp.getSigner();S.acct=E.getAddress(a);
   $('acct').textContent=S.acct;log('已连接 '+S.acct);eth.on&&eth.on('accountsChanged',()=>location.reload());
   await refreshTop();await refreshPositions();
@@ -244,12 +244,17 @@ function confirmBox(title,body){return new Promise(r=>{$('mT').textContent=title
 async function sendTx(title,tx,desc){
   let gas;try{gas=await rpc(p=>p.estimateGas({...tx,from:S.acct}))}catch(e){const m=e.shortMessage||e.message;log('模拟失败：'+title+' '+m,'bad');alert('模拟失败，没有发送：\n'+m);return null}
   const ok=await confirmBox(title,desc+`\n\n模拟通过，预估 gas ${gas}\n发送 HYPE：${f(tx.value||0n,6)}`);if(!ok){log('取消：'+title);return null}
-  const r=await S.signer.sendTransaction({...tx,gasLimit:gas*13n/10n});log(`已发送 ${title} ${r.hash}`);
-  const rc=await r.wait();log(`${title} ${rc.status===1?'成功':'失败'} ${r.hash}`,rc.status===1?'ok':'bad');return rc;
+  let hash;try{log('等钱包签名：'+title);const r=await S.signer.sendTransaction({...tx,gasLimit:gas*13n/10n});hash=r.hash}catch(e){
+    const m=e.shortMessage||e.message||String(e);if(/hash|transaction/i.test(m)&&e.receipt===undefined&&e.transaction?.hash)hash=e.transaction.hash;else{log('钱包没发出：'+title+' '+m,'bad');alert('钱包没发出：\n'+m);return null}}
+  log(`已发送 ${title} ${hash}，用节点轮询确认…`);
+  const t0=Date.now();while(Date.now()-t0<240000){await new Promise(r=>setTimeout(r,3000));
+    for(let k=0;k<C.rpcs.length;k++){try{const rc=await LP.provider(k).getTransactionReceipt(hash);if(rc){const ok=rc.status===1;log(`${title} ${ok?'成功':'失败'} ${hash}`,ok?'ok':'bad');if(!ok)alert(title+' 链上失败');return ok?rc:null}break}catch(e){}}}
+  log(`${title} 4 分钟没确认，${hash}。先别重复点，稍后刷新看`,'bad');alert(title+' 还没确认，稍后刷新再试，不要重复发');return null;
 }
 async function mint(){
   if(!S.plan)return;await refreshTop();const pl=S.plan;
   if(S.bal.erc20ToPermit2<pl.max1){if(!await sendTx('授权 KNTQ 给 Permit2',LP.buildApproveP2(),'第 1 步（一次性）：KNTQ.approve(Permit2, 无限)'))return}
+  if(S.bal.erc20ToPermit2<pl.max1)await refreshTop();
   if(S.bal.permit2Amt<pl.max1||S.bal.permit2Exp<Date.now()/1000+600){if(!await sendTx('Permit2 授权给仓位合约',LP.buildP2Approve(),'第 2 步（一次性）：Permit2.approve(KNTQ → PositionManager，1 年)'))return}
   const tx=LP.buildMint({tl:pl.tl,tu:pl.tu,L:pl.L,max0:pl.max0,max1:pl.max1,owner:S.acct});
   const rc=await sendTx('建仓',tx,`存入最多 ${f(pl.max0)} HYPE + ${f(pl.max1,2)} KNTQ\n区间 tick ${pl.tl} ~ ${pl.tu}\n多余 HYPE 自动退回`);
