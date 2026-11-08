@@ -53,7 +53,7 @@ input,select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-ra
 const E = (typeof module !== 'undefined' && module.exports) ? require('ethers') : root.ethers;
 const C = {
   chainId: 99901,
-  rpcs: ['https://rpc.asphodelhq.com', 'https://rpc-live.elysp.com'],
+  rpcs: ['https://rpc.asphodelhq.com'],
   PM: '0xe2e105d3f7209a9da11f83ccf3e7398a753823f1',
   POSM: '0x1d1c51b9d07fd27d36412a2b66cc23d19eb3e518',
   PERMIT2: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
@@ -208,7 +208,7 @@ log('页面加载');
 let P=LP.provider(0);
 const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('超时')),ms))]);
 let P0=LP.provider(0);
-async function rpc(fn,ms=12000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<2;t++){try{const r=await TO(fn(i===0?P0:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e}}}throw last}
+async function rpc(fn,ms=12000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<4;t++){try{const r=await TO(fn(t===0?P0:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',t,e);await new Promise(r=>setTimeout(r,1500*(t+1)))}}}throw last}
 async function hypePrice(){try{const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}'});const j=await r.json();const v=parseFloat(j.HYPE);if(v>0){S.hypeUsd=v;S.hypeUsdAt=Date.now()}}catch(e){}}
 function stale(){const age=(Date.now()-S.hypeUsdAt)/1000;$('stale').textContent=!S.hypeUsdAt?'(取价失败)':age>90?`(已过期 ${Math.round(age)}s)`:'';$('stale').className=age>90||!S.hypeUsdAt?'warn':'mut'}
 async function refreshTop(){
@@ -290,7 +290,7 @@ $('bCalc').onclick=()=>calc().catch(e=>alert(e.message));$('bMint').onclick=()=>
 document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{const r=b.dataset.r;$('iLo').value=r==='full'?99.99:r;$('iHi').value=r==='full'?1000000:r;S.plan=null;$('bMint').disabled=true});
 $('bAdd').onclick=()=>{const v=$('iAdd').value.trim();if(/^\d+$/.test(v)){addId(v);refreshPositions()}};
 $('bRef').onclick=()=>refreshTop().then(refreshPositions);$('sort').onchange=refreshPositions;$('hideEmpty').onchange=refreshPositions;
-$('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');$('bScan').disabled=true;try{const ids=await rpc(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
+$('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpc(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
 $('iBud').oninput=()=>{S.plan=null;$('bMint').disabled=true};
 (async()=>{await hypePrice();await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));refreshPositions();
