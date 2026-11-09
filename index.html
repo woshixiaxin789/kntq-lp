@@ -41,7 +41,7 @@ input,select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-ra
 <select id="sort"><option value="val">按价值</option><option value="fee">按待领</option><option value="apr">按年化</option><option value="id">按编号</option></select>
 <label class="mut"><input type="checkbox" id="hideEmpty" checked style="width:auto"> 隐藏已撤空</label></div>
 <div class="row"><button class="alt" id="bScan">扫描链上仓位</button><input id="iAdd" placeholder="编号，如 613,617" style="width:100px"><button class="alt" id="bAdd">添加</button><button class="alt" id="bRef">刷新</button></div>
-<div id="positions"></div></div>
+<div id="positions"><p class="mut">读取中…</p></div></div>
 
 <div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（含手续费）→ 按新区间把多出的 KNTQ 换成 HYPE（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
 <div class="row" style="margin-top:6px">新区间 KNTQ 价格 下 <input id="mLo" type="number" step="any" value="0.005197" style="width:95px"> 上 <input id="mHi" type="number" step="any" value="0.006606" style="width:95px"> HYPE</div>
@@ -252,7 +252,7 @@ let P=LP.provider(0);
 const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('超时')),ms))]);
 let P0=LP.provider(0);
 async function rpc(fn,ms=12000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<4;t++){try{const r=await TO(fn(t===0?P0:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',t,e);await new Promise(r=>setTimeout(r,1500*(t+1)))}}}throw last}
-async function hypePrice(){try{const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}'});const j=await r.json();const v=parseFloat(j.HYPE);if(v>0){S.hypeUsd=v;S.hypeUsdAt=Date.now()}}catch(e){}}
+async function hypePrice(){try{const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),6000);const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}',signal:ac.signal});clearTimeout(tm);const j=await r.json();const v=parseFloat(j.HYPE);if(v>0){S.hypeUsd=v;S.hypeUsdAt=Date.now()}}catch(e){}}
 function stale(){const age=(Date.now()-S.hypeUsdAt)/1000;$('stale').textContent=!S.hypeUsdAt?'(取价失败)':age>90?`(已过期 ${Math.round(age)}s)`:'';$('stale').className=age>90||!S.hypeUsdAt?'warn':'mut'}
 async function refreshTop(){
   S.pool=await rpc(p=>LP.readPool(p));const pl=S.pool;
@@ -324,7 +324,7 @@ async function _refreshPositions(){
     <div class="pos"><div><b>本金（现值）</b>${usd(p.val)}<br><span class="mut">${f(p.amount0)} HYPE + ${f(p.amount1,1)} KNTQ</span></div>
     <div><b>待领收益</b>${usd(p.fee)}<br><span class="mut">${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ</span></div>
     <div><b>近期年化 / 每秒</b>${p.apr==null?'<span class="mut">采样中…</span>':p.apr.toFixed(1)+'%'}<br><span class="mut">${p.ps==null?'':usd(p.ps).replace('$','$')+'/秒 · '+usd(p.ps*86400)+'/天'}</span></div></div>
-    ${mine?`<div class="row"><button class="alt" onclick="collect('${p.id}')">领取手续费</button><button class="red" onclick="removeAll('${p.id}')">全部撤池</button></div>`:''}</div>`}).join('')||'<p class="mut">还没有仓位。建仓后会自动加进来，或点「扫描链上仓位」。</p>';
+    ${mine?`<div class="row"><button class="alt" onclick="collect('${p.id}')">领取手续费</button><button class="red" onclick="removeAll('${p.id}')">全部撤池</button></div>`:''}</div>`}).join('')||(ids.length?(out.length?'<p class="mut">仓位都已撤空（取消勾选「隐藏已撤空」可看）。</p>':'<p class="bad">仓位没读到，点「刷新」重试。</p>'):'<p class="mut">本机没存仓位编号：在编号框填 613,617 点「添加」，或点「扫描链上仓位」。</p>');
 }
 async function collect(id){const p=S.pos[id];await sendTx('领取手续费 #'+id,LP.buildCollect({tokenId:BigInt(id),owner:S.acct}),`领取约 ${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ 到 ${S.acct}`)&&(await refreshTop(),await refreshPositions())}
 async function removeAll(id){const p=S.pos[id];const slip=BigInt(Math.round(+$('iSlip').value*100));
@@ -369,6 +369,6 @@ $('bRef').onclick=()=>refreshTop().then(refreshPositions);$('sort').onchange=ref
 $('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpc(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
 $('iBud').oninput=()=>{S.plan=null;$('bMint').disabled=true};
-(async()=>{await hypePrice();await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));refreshPositions();
-  setInterval(async()=>{if(document.hidden||S.busy||_rp)return;await hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{})},30000)})();
+(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));refreshPositions();
+  setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{})},30000)})();
 </script></body></html>
