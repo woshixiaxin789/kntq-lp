@@ -464,11 +464,13 @@ const CH={mode:'b',hours:6,hist:null,liq:null,span:null,center:null,drag:null,lo
 const cv=$('rc'),cx=cv.getContext('2d');
 const chIn=()=>CH.mode==='b'?[$('bLo'),$('bHi')]:[$('mLo'),$('mHi')];
 const p2tick=p=>-Math.log(p)/Math.log(1.0001);
-function chRangeTicks(){const [lo,hi]=chIn().map(x=>+x.value);if(!(lo>0&&hi>lo))return null;return{tHiP:p2tick(hi),tLoP:p2tick(lo)}} // tHiP < tLoP
+const SANE=12000;const chCur=()=>S.pool?S.pool.tick:52000;
+function chRangeTicks(){const [lo,hi]=chIn().map(x=>+x.value);if(!(lo>0&&hi>lo))return null;const r={tHiP:p2tick(hi),tLoP:p2tick(lo)},c=chCur();if(r.tHiP<c-SANE||r.tLoP>c+SANE)return null;return r}
+function chFix(){const [a,b]=chIn();if(chRangeTicks())return;const c=chCur(),TS=C.TS,ps=Object.values(S.pos||{}).find(p=>p.liquidity>0n);let tl=ps?ps.tickLower:Math.floor((c-500)/TS)*TS,tu=ps?ps.tickUpper:Math.ceil((c+500)/TS)*TS;tl=Math.round(tl/TS)*TS;tu=Math.round(tu/TS)*TS;if(tu-tl<TS)tu=tl+TS;a.value=t2p(tu).toPrecision(5);b.value=t2p(tl).toPrecision(5)} // tHiP < tLoP
 function chView(){const cur=S.pool?S.pool.tick:52000;let mn=cur,mx=cur;
-  if(CH.hist)for(const q of CH.hist.pts){if(q[1]<mn)mn=q[1];if(q[1]>mx)mx=q[1]}
+  if(CH.hist)for(const q of CH.hist.pts){if(Math.abs(q[1]-cur)>SANE)continue;if(q[1]<mn)mn=q[1];if(q[1]>mx)mx=q[1]}
   const r=chRangeTicks();if(r){mn=Math.min(mn,r.tHiP);mx=Math.max(mx,r.tLoP)}
-  if(CH.span==null){CH.span=Math.max(1200,(mx-mn)*1.35);CH.center=(mx+mn)/2}
+  if(CH.span==null){CH.span=Math.max(1200,(mx-mn)*1.35);CH.center=(mx+mn)/2}CH.span=Math.min(Math.max(CH.span,400),SANE*2);CH.center=Math.min(Math.max(CH.center,cur-SANE),cur+SANE)
   return{top:CH.center-CH.span/2,bot:CH.center+CH.span/2}}
 function chSize(){const w=cv.clientWidth,h=cv.clientHeight,d=window.devicePixelRatio||1;if(cv.width!==Math.round(w*d)){cv.width=Math.round(w*d);cv.height=Math.round(h*d)}cx.setTransform(d,0,0,d,0,0);return{w,h}}
 const tY=(t,v,h)=>(t-v.top)/(v.bot-v.top)*h, yT=(y,v,h)=>v.top+y/h*(v.bot-v.top);
@@ -502,7 +504,7 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
     cx.fillStyle='#fff';cx.beginPath();cx.roundRect?cx.roundRect(LW/2-22,y-7,44,14,7):cx.rect(LW/2-22,y-7,44,14);cx.fill();cx.fillStyle='#5eead4';for(let i=-1;i<=1;i++)cx.fillRect(LW/2-9,y-3+i*3+1,18,1.4)})}
 }
 function lbl(t,x,y,bg,fg,al){cx.font='600 11.5px -apple-system,system-ui,sans-serif';const tw=cx.measureText(t).width+12,x0=al==='right'?x-tw:x;cx.fillStyle=bg;cx.beginPath();cx.roundRect?cx.roundRect(x0,y-19,tw,17,6):cx.rect(x0,y-19,tw,17);cx.fill();cx.fillStyle=fg;cx.textAlign='left';cx.textBaseline='middle';cx.fillText(t,x0+6,y-10.5)}
-function chSet(tHi,tLo){const TS=C.TS;tHi=Math.round(tHi/TS)*TS;tLo=Math.round(tLo/TS)*TS;if(tLo-tHi<TS)return false;const [a,b]=chIn();a.value=t2p(tLo).toPrecision(5);b.value=t2p(tHi).toPrecision(5);return true}
+function chSet(tHi,tLo){const TS=C.TS,c=chCur();tHi=Math.max(tHi,c-SANE);tLo=Math.min(tLo,c+SANE);tHi=Math.round(tHi/TS)*TS;tLo=Math.round(tLo/TS)*TS;if(tLo-tHi<TS)return false;const [a,b]=chIn();a.value=t2p(tLo).toPrecision(5);b.value=t2p(tHi).toPrecision(5);return true}
 let _cc=null;function chAfter(){clearTimeout(_cc);_cc=setTimeout(()=>{if(CH.mode==='b'){try{store.set('lp_range',[$('bLo').value,$('bHi').value]);if(S.pool&&S.bal)$('calc').innerHTML=planText(buildPlan()).replace(/\n/g,'<br>')}catch(e){$('calc').textContent=e.message}}},150)}
 function evY(e){const rc=cv.getBoundingClientRect();return e.clientY-rc.top}
 cv.addEventListener('pointerdown',e=>{const r=chRangeTicks();if(!r)return;const {h}=chSize(),v=chView(),y=evY(e),ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);
@@ -515,10 +517,10 @@ cv.addEventListener('pointermove',e=>{if(!CH.drag)return;e.preventDefault();cons
   if(chSet(a,b)){chDraw();chAfter()}});
 const chEnd=e=>{if(!CH.drag)return;CH.drag=null;chDraw();chAfter()};cv.addEventListener('pointerup',chEnd);cv.addEventListener('pointercancel',chEnd);
 ['bLo','bHi','mLo','mHi'].forEach(id=>$(id).addEventListener('input',()=>chDraw()));
-document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{CH.mode=b.dataset.cm;document.querySelectorAll('[data-cm]').forEach(x=>x.className=x===b?'':'alt');CH.span=null;chDraw()});
+document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{CH.mode=b.dataset.cm;chFix();document.querySelectorAll('[data-cm]').forEach(x=>x.className=x===b?'':'alt');CH.span=null;chDraw()});
 document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{CH.hours=+b.dataset.ch;document.querySelectorAll('[data-ch]').forEach(x=>x.className=x===b?'':'alt');loadHist()});
 $('czIn').onclick=()=>{chView();CH.span=Math.max(400,CH.span/1.5);chDraw()};$('czOut').onclick=()=>{chView();CH.span*=1.5;chDraw()};
-$('czFit').onclick=()=>{CH.span=null;chDraw()};
+$('czFit').onclick=()=>{chFix();CH.span=null;chDraw();chAfter()};
 async function loadLiq(){try{CH.liq=await rpc(p=>liqDist(p,LP),20000);CH.lastLiq=Date.now();
   // align segment L with pool active L (ticks outside scanned words)
   if(S.pool){const s=CH.liq.segs.find(s=>s[0]<=S.pool.tick&&S.pool.tick<s[1]);if(s){const dlt=S.pool.liquidity-s[2];CH.liq.segs.forEach(x=>x[2]+=dlt)}}chDraw()}catch(e){console.warn('liq',e)}}
@@ -526,6 +528,6 @@ async function loadHist(){CH.loading=true;CH.hist=null;chDraw();try{CH.hist=awai
 function chTick(){if(CH.hist&&S.pool){CH.hist.pts.push([CH.hist.head+Math.round((Date.now()/1000-CH.hist.headTs)*9.67),S.pool.tick])}if(Date.now()-CH.lastLiq>120e3)loadLiq();chDraw()}
 window.addEventListener('resize',chDraw);
 
-(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>chDraw());
+(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix();CH.mode='b';chFix();CH.mode=m;CH.span=null;chDraw()});
   setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000)})();
 </script></body></html>
