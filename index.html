@@ -58,13 +58,15 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 <div><b>HYPE 美元价</b><span id="vHU">-</span> <span id="stale" class="mut"></span></div><div><b>当前 tick</b><span id="vT">-</span></div>
 </div></div>
 
+<div class="card"><div class="row"><h2 class="grow">我的仓位</h2>
+<select id="sort"><option value="val">按价值</option><option value="fee">按待领</option><option value="apr">按年化</option><option value="id">按编号</option></select>
+<label class="mut"><input type="checkbox" id="hideEmpty" checked style="width:auto"> 隐藏已撤空</label></div>
+<div class="row"><button class="alt" id="bScan">扫描链上仓位</button><input id="iAdd" placeholder="编号，如 613,617" style="width:150px"><button class="alt" id="bAdd">添加</button><button class="alt" id="bRef">刷新</button></div>
+<div id="positions"><p class="mut">读取中…</p></div></div>
+
 <div class="card"><h2>建仓</h2>
-<div class="row" style="margin-bottom:6px"><span class="mut">拖动调整：</span><button data-cm="b">建仓区间</button><button class="alt" data-cm="m">移仓区间</button><span class="grow"></span><button class="alt" data-ch="1">1h</button><button data-ch="6">6h</button><button class="alt" data-ch="24">24h</button></div>
-<div style="position:relative"><canvas id="rc" style="width:100%;height:300px;display:block;touch-action:none;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid var(--line)"></canvas>
-<div style="position:absolute;right:8px;bottom:8px;display:flex;gap:6px"><button class="alt" id="czIn" style="padding:4px 10px">＋</button><button class="alt" id="czOut" style="padding:4px 10px">－</button><button class="alt" id="czFit" style="padding:4px 10px">适配</button></div></div>
-<div class="row mut" style="margin:4px 0 8px">上下拖青色线改上/下限，拖中间整体平移。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
 <div class="row">KNTQ 价格区间 下 <input id="bLo" type="number" step="any" style="width:95px"> 上 <input id="bHi" type="number" step="any" style="width:95px"> HYPE</div>
-<div class="row" style="margin-top:6px"><span class="mut">快捷：</span><button class="alt" data-r="10">现价±10%</button><button class="alt" data-r="20">±20%</button><button class="alt" data-r="50">±50%</button><button class="alt" data-r="full">全区间</button><button class="alt" id="bLast">沿用上次</button></div>
+<div class="row" style="margin-top:6px"><span class="mut">快捷：</span><button class="alt" data-r="10">现价±10%</button><button class="alt" id="bLast">沿用上次</button></div>
 <div class="row" style="margin-top:6px"><label><input type="radio" name="amode" value="bal" checked style="width:auto"> 用钱包余额</label> <b id="pctV" style="font-size:16px;min-width:48px">100%</b><span class="mut">留 gas</span> <input id="iGas" type="number" step="any" value="0.3" style="width:60px"> <span class="mut">HYPE</span></div>
 <div class="row" style="margin-top:8px"><input id="iPct" type="range" min="1" max="100" step="1" value="100" class="grow" style="width:auto;padding:0"></div>
 <div class="row" style="margin-top:6px"><button class="alt" data-p="25">25%</button><button class="alt" data-p="50">50%</button><button class="alt" data-p="75">75%</button><button class="alt" data-p="100">最大</button></div>
@@ -74,11 +76,12 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 <div class="mut" style="margin-top:4px">点「建仓」时会重新读一次最新价格并重算数量，确认后发交易前再读一次，价格动了也按能放进去的最大量来，多出来的币留在钱包。</div>
 <div id="calc" class="mut" style="margin-top:6px"></div></div>
 
-<div class="card"><div class="row"><h2 class="grow">我的仓位</h2>
-<select id="sort"><option value="val">按价值</option><option value="fee">按待领</option><option value="apr">按年化</option><option value="id">按编号</option></select>
-<label class="mut"><input type="checkbox" id="hideEmpty" checked style="width:auto"> 隐藏已撤空</label></div>
-<div class="row"><button class="alt" id="bScan">扫描链上仓位</button><input id="iAdd" placeholder="编号，如 613,617" style="width:150px"><button class="alt" id="bAdd">添加</button><button class="alt" id="bRef">刷新</button></div>
-<div id="positions"><p class="mut">读取中…</p></div></div>
+<div class="card"><h2>范围选取</h2>
+<div class="row" style="margin-bottom:6px"><span class="mut">拖动调整：</span><button data-cm="b">建仓区间</button><button class="alt" data-cm="m">移仓区间</button><span class="grow"></span><button class="alt" data-ch="1">1h</button><button data-ch="6">6h</button><button class="alt" data-ch="24">24h</button></div>
+<div style="position:relative"><canvas id="rc" style="width:100%;height:300px;display:block;touch-action:none;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid var(--line)"></canvas>
+<div style="position:absolute;right:8px;bottom:8px;display:flex;gap:6px"><button class="alt" id="czIn" style="padding:4px 10px">＋</button><button class="alt" id="czOut" style="padding:4px 10px">－</button><button class="alt" id="czFit" style="padding:4px 10px">适配</button></div></div>
+<div class="row mut" style="margin:4px 0 8px">上下拖青色线改上/下限，拖中间整体平移。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
+</div>
 
 <div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（含手续费）→ 按新区间把多出的 KNTQ 换成 HYPE（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
 <div class="row" style="margin-top:6px">新区间 KNTQ 价格 下 <input id="mLo" type="number" step="any" value="0.005197" style="width:95px"> 上 <input id="mHi" type="number" step="any" value="0.006606" style="width:95px"> HYPE</div>
