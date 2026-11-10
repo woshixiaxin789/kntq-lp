@@ -2,21 +2,48 @@
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KNTQ/HYPE LP 工具 · Elysium</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 -apple-system,system-ui,"PingFang SC",sans-serif;background:#0d1117;color:#e6edf3}
-.wrap{max-width:980px;margin:0 auto;padding:14px}h1{font-size:18px;margin:4px 0 10px}h2{font-size:15px;margin:0 0 8px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:12px;margin-bottom:12px}
+:root{--bg:#070a12;--card:rgba(22,27,40,.72);--line:rgba(148,163,184,.14);--txt:#e8ecf4;--mut:#8a94a8;--acc:#5eead4;--acc2:#a78bfa;--ok:#34d399;--warn:#fbbf24;--bad:#f87171}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--txt);min-height:100vh;
+ background:radial-gradient(1000px 520px at 85% -10%,rgba(167,139,250,.20),transparent 60%),radial-gradient(900px 500px at -10% 10%,rgba(94,234,212,.14),transparent 60%),var(--bg);background-attachment:fixed}
+.wrap{max-width:980px;margin:0 auto;padding:18px 14px 40px}
+h1{font-size:20px;font-weight:700;margin:6px 0 16px;letter-spacing:.2px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+h1::before{content:"";width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 0 22px rgba(94,234,212,.35)}
+h1 .mut{font-size:12px;font-weight:500;padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.03)}
+h2{font-size:15px;font-weight:650;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+h2::before{content:"";width:4px;height:15px;border-radius:2px;background:linear-gradient(var(--acc),var(--acc2))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.grow{flex:1}
-button{background:#238636;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-size:14px;cursor:pointer}
-button.alt{background:#30363d}button.red{background:#b62324}button:disabled{opacity:.45}
-input,select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:7px;font-size:14px;width:110px}
-.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}.kv div{background:#0d1117;border-radius:8px;padding:6px 8px}
-.kv b{display:block;font-size:12px;color:#8b949e;font-weight:400}.mut{color:#8b949e;font-size:12px}
-.warn{color:#f0b429}.bad{color:#ff7b72}.ok{color:#3fb950}
-.pos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}@media(max-width:560px){.pos{grid-template-columns:repeat(2,1fr)}}
-.pos div{background:#0d1117;border-radius:8px;padding:6px 8px}.pos b{display:block;font-size:12px;color:#8b949e;font-weight:400}
-#modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;padding:14px;z-index:9}
-#modal .card{max-width:520px;width:100%;max-height:90vh;overflow:auto}pre{white-space:pre-wrap;word-break:break-all;font-size:12px;margin:0}
-#log{max-height:220px;overflow:auto;font-size:12px}
+button{background:linear-gradient(135deg,#2dd4bf,#8b5cf6);color:#fff;border:0;border-radius:11px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;transition:transform .08s,filter .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(139,92,246,.25)}
+button:hover{filter:brightness(1.08)}button:active{transform:scale(.97)}
+button.alt{background:rgba(255,255,255,.06);border:1px solid var(--line);box-shadow:none;font-weight:500;color:var(--txt)}
+button.alt:hover{background:rgba(255,255,255,.10)}
+button.red{background:linear-gradient(135deg,#f43f5e,#b91c1c);box-shadow:0 4px 14px rgba(244,63,94,.25)}
+button:disabled{opacity:.4;cursor:not-allowed}
+input,select{background:rgba(0,0,0,.35);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;width:110px;outline:none;transition:border-color .15s,box-shadow .15s;font-variant-numeric:tabular-nums}
+input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(94,234,212,.15)}
+input[type=radio],input[type=checkbox]{accent-color:var(--acc)}
+label{display:inline-flex;align-items:center;gap:6px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.kv div,.pos div{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.kv b,.pos b{display:block;font-size:11.5px;color:var(--mut);font-weight:500;margin-bottom:2px;letter-spacing:.3px}
+.mut{color:var(--mut);font-size:12px;font-weight:400}
+.warn{color:var(--warn)}.bad{color:var(--bad)}.ok{color:var(--ok)}
+.pos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}@media(max-width:560px){.pos{grid-template-columns:1fr 1fr}.pos div:last-child{grid-column:1/-1}}
+.pcard{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:10px}
+.pill{font-size:12px;padding:2px 10px;border-radius:999px;border:1px solid currentColor;font-weight:600}
+.bar{position:relative;height:8px;border-radius:999px;background:rgba(255,255,255,.07);margin:12px 0 4px;overflow:visible}
+.bar i{position:absolute;inset:0;border-radius:999px;background:linear-gradient(90deg,rgba(94,234,212,.55),rgba(167,139,250,.55))}
+.bar em{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:#fff;box-shadow:0 0 10px #fff;transform:translateX(-2px)}
+.barlbl{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+#calc{background:rgba(94,234,212,.06);border:1px dashed rgba(94,234,212,.25);border-radius:12px;padding:10px 12px;color:var(--txt);font-size:13px}#calc:empty{display:none}
+#mInfo:not(:empty){background:rgba(167,139,250,.06);border:1px dashed rgba(167,139,250,.25);border-radius:12px;padding:10px 12px;color:var(--txt);font-size:13px}
+#modal{position:fixed;inset:0;background:rgba(3,6,12,.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:14px;z-index:9}
+#modal .card{max-width:520px;width:100%;max-height:90vh;overflow:auto;background:#121826}
+pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-family:inherit;line-height:1.6}
+#log{max-height:220px;overflow:auto;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mut)}#log div{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.wrap>p.mut{text-align:center;line-height:1.7;margin-top:18px}
+@media(max-width:560px){.wrap{padding:12px 10px 30px}.card{padding:14px;border-radius:16px}button{padding:10px 14px}}
 </style></head><body><div class="wrap">
 <h1>KNTQ/HYPE · Uniswap v4 LP 工具 <span class="mut">Elysium 99901 · 费率 1% · 无 hook</span></h1>
 
@@ -325,7 +352,9 @@ async function _refreshPositions(){
   const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};
   $('positions').innerHTML=out.filter(p=>!($('hideEmpty').checked&&p.liquidity===0n&&p.fee<0.001)).map(p=>{S.pos[p.id]=p;
     const mine=S.acct&&p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase();const pl=t=>(1/Math.pow(1.0001,t)).toPrecision(4);
-    return `<div class="card" style="background:#0f141a"><div class="row"><b>#${p.id}</b><span class="${p.inRange?'ok':'warn'}">${p.liquidity===0n?'已撤空':p.inRange?'区间内':'区间外，不赚手续费'}</span><span class="mut grow">区间 ${pl(p.tickUpper)}~${pl(p.tickLower)} HYPE/KNTQ</span>${mine?'':'<span class="warn">非当前钱包</span>'}</div>
+    const lo=1/Math.pow(1.0001,p.tickUpper),hi=1/Math.pow(1.0001,p.tickLower),cur=S.pool.hypePerKntq,pc=Math.max(0,Math.min(100,(cur-lo)/(hi-lo)*100));
+    return `<div class="pcard"><div class="row"><b style="font-size:16px">#${p.id}</b><span class="pill ${p.inRange?'ok':'warn'}">${p.liquidity===0n?'已撤空':p.inRange?'区间内':'区间外，不赚手续费'}</span><span class="grow"></span>${mine?'':'<span class="warn">非当前钱包</span>'}</div>
+    ${p.liquidity===0n?'':`<div class="bar"><i></i><em style="left:${pc}%"></em></div><div class="barlbl"><span>${pl(p.tickUpper)}</span><span>现价 ${cur.toPrecision(4)}</span><span>${pl(p.tickLower)}</span></div>`}
     <div class="pos"><div><b>本金（现值）</b>${usd(p.val)}<br><span class="mut">${f(p.amount0)} HYPE + ${f(p.amount1,1)} KNTQ</span></div>
     <div><b>待领收益</b>${usd(p.fee)}<br><span class="mut">${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ</span></div>
     <div><b>近期年化 / 每秒</b>${p.apr==null?'<span class="mut">采样中…</span>':p.apr.toFixed(1)+'%'}<br><span class="mut">${p.ps==null?'':usd(p.ps).replace('$','$')+'/秒 · '+usd(p.ps*86400)+'/天'}</span></div></div>
