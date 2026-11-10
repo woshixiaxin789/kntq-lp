@@ -1,0 +1,33 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KNTQ 跨链领取</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;margin:0;padding:20px;max-width:520px}
+h1{font-size:20px}.box{background:#1a1d24;border-radius:12px;padding:14px;margin:12px 0;font-size:14px;word-break:break-all}
+input{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #333;background:#0f1115;color:#e8e8e8;font-size:13px}
+button{width:100%;padding:14px;border:0;border-radius:10px;font-size:16px;margin-top:10px;background:#3b82f6;color:#fff}button:disabled{opacity:.5}
+#log{white-space:pre-wrap;font-size:13px;color:#aaa}</style></head><body>
+<h1>KNTQ 跨链领取（Elysium）</h1>
+<div class="box">HyperEVM → Elysium 的跨链如果没自动到账，可以在这里手动领取。任何钱包都能点，币会到原来的收款地址。<br><br>票据 ID：<input id="tid" value="0xe172796ff75913d11d930fdd77d60df501be52bdcf54b2437f6e681509b930d1"></div>
+<div class="box" id="st">状态：未查询</div>
+<button id="chk">1. 查询票据</button>
+<button id="go">2. 连接钱包并领取</button>
+<div class="box" id="log"></div>
+<script>
+const RPC='https://rpc.elysium.kinetiq.xyz',CID=99901,P='0x000000000000000000000000000000000000006E';
+const $=i=>document.getElementById(i),log=s=>$('log').textContent+=s+'\n';
+const tid=()=>{const t=$('tid').value.trim().toLowerCase();if(!/^0x[0-9a-f]{64}$/.test(t))throw Error('票据 ID 格式不对');return t};
+async function rpc(m,p){const r=await fetch(RPC,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})});const j=await r.json();if(j.error)throw Error(j.error.message);return j.result}
+async function check(){const t=tid();try{const r=await rpc('eth_call',[{to:P,data:'0x9f1025c6'+t.slice(2)},'latest']);
+const ts=parseInt(r,16);$('st').textContent='状态：票据还在，未领取。截止 '+new Date(ts*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})+'（北京时间）';return true}
+catch(e){$('st').textContent='状态：票据不存在，可能已经领过或已过期（'+e.message.slice(0,80)+'）';return false}}
+$('chk').onclick=()=>check().catch(e=>log('出错：'+e.message));
+$('go').onclick=async()=>{try{const eth=window.ethereum;if(!eth){log('没检测到钱包。请在 MetaMask 或 Rabby App 的内置浏览器里打开这个页面。');return}
+const t=tid();const [a]=await eth.request({method:'eth_requestAccounts'});log('钱包：'+a);
+try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+CID.toString(16)}]})}catch(e){
+await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+CID.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[RPC]}]})}
+if(!await check()){log('票据不可领，已停止。');return}
+const data='0xeda1122c'+t.slice(2);$('go').disabled=true;log('请在钱包里确认（金额 0，约 0.0001 HYPE gas）…');
+const h=await eth.request({method:'eth_sendTransaction',params:[{from:a,to:P,data,value:'0x0',gas:'0x493e0'}]});log('已发送：'+h+'\n等待确认…');
+for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,2000));const rc=await rpc('eth_getTransactionReceipt',[h]);if(rc){log(rc.status==='0x1'?'✅ 领取成功，KNTQ 应已到账。':'❌ 交易失败，把哈希发给 Hark 看看。');break}}
+}catch(e){log('出错：'+(e.message||e));}finally{$('go').disabled=false}};
+check().catch(()=>{});
+</script></body></html>
