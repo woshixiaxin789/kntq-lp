@@ -323,7 +323,7 @@ function log(m,cls=''){const t=new Date().toLocaleTimeString();const l=store.get
 log('页面加载，当前池子 '+C.POOL_NAME);$('hFee').textContent=C.POOL_NAME;$('poolSel').value=C.POOL_K;$('poolSel').onchange=e=>{store.set('lp_pool',e.target.value);location.href=location.pathname+'?pool='+e.target.value};
 let P=LP.provider(0);
 const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('超时')),ms))]);
-let PS=null;const prov=()=>PS||(PS=C.rpcs.map((_,i)=>LP.provider(i)));
+let PS=null;const prov=()=>PS||(PS=C.rpcs.map((_,i)=>LP.provider(i)));const P0=prov()[0];
 async function rpcSeq(fn,ms=20000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<2;t++){try{const r=await TO(fn(t===0?prov()[i]:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',i,t,e);await new Promise(r=>setTimeout(r,1000))}}}throw last}
 async function rpc(fn,ms=8000){let last;for(let t=0;t<3;t++){const ps=t===0?prov():C.rpcs.map((_,i)=>LP.provider(i));try{const r=await Promise.any(ps.map((p,i)=>TO(fn(p),ms).then(v=>{$('rpcSt').textContent='RPC '+(i+1);return v})));return r}catch(e){last=(e.errors&&e.errors[0])||e;console.warn('rpc race',t,e);$('rpcSt').textContent='RPC 重试 '+(t+1);await new Promise(r=>setTimeout(r,1000))}}throw last}
 async function hypePrice(){try{const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),6000);const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}',signal:ac.signal});clearTimeout(tm);const j=await r.json();const v=parseFloat(j.HYPE);if(v>0){S.hypeUsd=v;S.hypeUsdAt=Date.now()}}catch(e){}}
