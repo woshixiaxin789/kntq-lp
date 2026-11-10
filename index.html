@@ -59,6 +59,10 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 </div></div>
 
 <div class="card"><h2>建仓</h2>
+<div class="row" style="margin-bottom:6px"><span class="mut">拖动调整：</span><button data-cm="b">建仓区间</button><button class="alt" data-cm="m">移仓区间</button><span class="grow"></span><button class="alt" data-ch="1">1h</button><button data-ch="6">6h</button><button class="alt" data-ch="24">24h</button></div>
+<div style="position:relative"><canvas id="rc" style="width:100%;height:300px;display:block;touch-action:none;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid var(--line)"></canvas>
+<div style="position:absolute;right:8px;bottom:8px;display:flex;gap:6px"><button class="alt" id="czIn" style="padding:4px 10px">＋</button><button class="alt" id="czOut" style="padding:4px 10px">－</button><button class="alt" id="czFit" style="padding:4px 10px">适配</button></div></div>
+<div class="row mut" style="margin:4px 0 8px">上下拖青色线改上/下限，拖中间整体平移。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
 <div class="row">KNTQ 价格区间 下 <input id="bLo" type="number" step="any" style="width:95px"> 上 <input id="bHi" type="number" step="any" style="width:95px"> HYPE</div>
 <div class="row" style="margin-top:6px"><span class="mut">快捷：</span><button class="alt" data-r="10">现价±10%</button><button class="alt" data-r="20">±20%</button><button class="alt" data-r="50">±50%</button><button class="alt" data-r="full">全区间</button><button class="alt" id="bLast">沿用上次</button></div>
 <div class="row" style="margin-top:6px"><label><input type="radio" name="amode" value="bal" checked style="width:auto"> 用钱包余额</label> <b id="pctV" style="font-size:16px;min-width:48px">100%</b><span class="mut">留 gas</span> <input id="iGas" type="number" step="any" value="0.3" style="width:60px"> <span class="mut">HYPE</span></div>
@@ -273,6 +277,26 @@ const api = { buildRemoveMany, buildP2ApproveUR, p2AllowUR, buildSwapK2H, swapPl
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LP = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
+<script>// chart data helpers (browser+node): liquidity distribution + swap price history
+async function liqDist(p,LP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAbiCoder();
+ const pm=new E.Contract(C.PM,['function extsload(bytes32) view returns (bytes32)','function extsload(bytes32,uint256) view returns (bytes32[])'],LP.mcRunner(p));
+ const ss=E.keccak256(ab.encode(['bytes32','uint256'],[C.POOL_ID,6]));const add=(s,n)=>E.toBeHex(BigInt(s)+BigInt(n),32);
+ const pool=await LP.readPool(p);const TS=C.TS,comp=Math.floor(pool.tick/TS),w0=comp>>8;
+ const words=[];for(let w=w0-2;w<=w0+2;w++)words.push(w);
+ const bms=await Promise.all(words.map(w=>pm['extsload(bytes32)'](E.keccak256(ab.encode(['int16','bytes32'],[w,add(ss,5)])))));
+ const ticks=[];words.forEach((w,i)=>{let b=BigInt(bms[i]);for(let k=0;k<256;k++)if((b>>BigInt(k))&1n)ticks.push(((w<<8)+k)*TS)});
+ const nets=await Promise.all(ticks.map(t=>pm['extsload(bytes32)'](E.keccak256(ab.encode(['int24','bytes32'],[t,add(ss,4)])))));
+ const pts=ticks.map((t,i)=>{let n=BigInt(nets[i])>>128n;if(n>=(1n<<127n))n-=(1n<<128n);return[t,n]}).sort((a,b)=>a[0]-b[0]);
+ // build liquidity steps: L at current = pool.liquidity; walk
+ let segs=[];let L=0n;for(let i=0;i<pts.length;i++){L+=pts[i][1];if(i+1<pts.length)segs.push([pts[i][0],pts[i+1][0],L])}
+ return{pool,segs}}
+async function priceHist(p,LP,hours=6,onP){const E=LP.E,C=LP.C;const topic=E.id('Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)');
+ const head=await p.getBlockNumber();const blocks=Math.round(hours*60*580);const out=[];const chunks=[];
+ for(let b=head;b>head-blocks;b-=10000)chunks.push([Math.max(b-9999,head-blocks),b]);let i=0,done=0;
+ async function w(){while(i<chunks.length){const [a,b]=chunks[i++];for(let t=0;t<5;t++){try{const ls=await p.getLogs({address:C.PM,topics:[topic,C.POOL_ID],fromBlock:a,toBlock:b});for(const l of ls){const d=E.AbiCoder.defaultAbiCoder().decode(['int128','int128','uint160','uint128','int24','uint24'],l.data);out.push([l.blockNumber,Number(d[4])])}break}catch(e){await new Promise(r=>setTimeout(r,1200*(t+1)))}}done++;onP&&onP(done,chunks.length)}}
+ await Promise.all([w(),w()]);out.sort((a,b)=>a[0]-b[0]);const blk=await p.getBlock(head);return{head,headTs:blk.timestamp,pts:out}}
+if(typeof module!=='undefined')module.exports={liqDist,priceHist};else{window.liqDist=liqDist;window.priceHist=priceHist}
+</script>
 <script>
 const {E,C}=LP;const $=id=>document.getElementById(id);
 const S={acct:null,signer:null,rpcIdx:0,pool:null,bal:null,hypeUsd:null,hypeUsdAt:0,plan:null,pos:{}};
@@ -413,15 +437,82 @@ $('mCalc').onclick=()=>mEstimate().catch(e=>alert(e.shortMessage||e.message));
 $('mGo').onclick=()=>migrate().catch(e=>{log('移仓出错 '+(e.shortMessage||e.message),'bad');alert(e.shortMessage||e.message)});
 $('bConn').onclick=()=>connect().catch(e=>{log('连接失败 '+(e.shortMessage||e.message),'bad');alert(e.message)});
 $('bCalc').onclick=()=>calc().catch(e=>alert(e.message));$('bMint').onclick=()=>mintQuick().catch(e=>{log('建仓出错 '+(e.shortMessage||e.message),'bad');alert(e.shortMessage||e.message)});
-document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{const r=b.dataset.r;if(r==='full'){$('bLo').value=0;$('bHi').value=0}else{if(!S.pool)return alert('还没读到价格');const p=S.pool.hypePerKntq;$('bLo').value=(p*(1-r/100)).toPrecision(5);$('bHi').value=(p*(1+r/100)).toPrecision(5)}calc().catch(()=>{})});
+document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{const r=b.dataset.r;if(r==='full'){$('bLo').value=0;$('bHi').value=0}else{if(!S.pool)return alert('还没读到价格');const p=S.pool.hypePerKntq;$('bLo').value=(p*(1-r/100)).toPrecision(5);$('bHi').value=(p*(1+r/100)).toPrecision(5)}CH.span=null;chDraw();calc().catch(()=>{})});
 let _pt=null;const setPct=v=>{$('iPct').value=v;$('pctV').textContent=v+'%';document.querySelector('input[name=amode][value=bal]').checked=true;clearTimeout(_pt);_pt=setTimeout(()=>{try{if(S.pool&&S.bal)$('calc').innerHTML=planText(buildPlan()).replace(/\n/g,'<br>')}catch(e){$('calc').textContent=e.message}},120)};
 $('iPct').oninput=()=>setPct($('iPct').value);document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>setPct(b.dataset.p));
-$('bLast').onclick=()=>{const r=store.get('lp_range',null);if(!r)return alert('还没有上次的区间');$('bLo').value=r[0];$('bHi').value=r[1];calc().catch(()=>{})};
+$('bLast').onclick=()=>{const r=store.get('lp_range',null);if(!r)return alert('还没有上次的区间');$('bLo').value=r[0];$('bHi').value=r[1];CH.span=null;chDraw();calc().catch(()=>{})};
 {const r=store.get('lp_range',null);$('bLo').value=r?r[0]:'0.004608';$('bHi').value=r?r[1]:'0.005196'}
 $('bAdd').onclick=()=>{const v=$('iAdd').value.split(/[^0-9]+/).filter(Boolean);v.forEach(addId);if(v.length)refreshPositions()};
 $('bRef').onclick=()=>refreshTop().then(refreshPositions);$('sort').onchange=refreshPositions;$('hideEmpty').onchange=refreshPositions;
 $('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpc(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
-(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));refreshPositions();
-  setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{})},30000)})();
+// ===== 可拖动区间图表 (v14) =====
+const CH={mode:'b',hours:6,hist:null,liq:null,span:null,center:null,drag:null,loading:false,lastLiq:0};
+const cv=$('rc'),cx=cv.getContext('2d');
+const chIn=()=>CH.mode==='b'?[$('bLo'),$('bHi')]:[$('mLo'),$('mHi')];
+const p2tick=p=>-Math.log(p)/Math.log(1.0001);
+function chRangeTicks(){const [lo,hi]=chIn().map(x=>+x.value);if(!(lo>0&&hi>lo))return null;return{tHiP:p2tick(hi),tLoP:p2tick(lo)}} // tHiP < tLoP
+function chView(){const cur=S.pool?S.pool.tick:52000;let mn=cur,mx=cur;
+  if(CH.hist)for(const q of CH.hist.pts){if(q[1]<mn)mn=q[1];if(q[1]>mx)mx=q[1]}
+  const r=chRangeTicks();if(r){mn=Math.min(mn,r.tHiP);mx=Math.max(mx,r.tLoP)}
+  if(CH.span==null){CH.span=Math.max(1200,(mx-mn)*1.35);CH.center=(mx+mn)/2}
+  return{top:CH.center-CH.span/2,bot:CH.center+CH.span/2}}
+function chSize(){const w=cv.clientWidth,h=cv.clientHeight,d=window.devicePixelRatio||1;if(cv.width!==Math.round(w*d)){cv.width=Math.round(w*d);cv.height=Math.round(h*d)}cx.setTransform(d,0,0,d,0,0);return{w,h}}
+const tY=(t,v,h)=>(t-v.top)/(v.bot-v.top)*h, yT=(y,v,h)=>v.top+y/h*(v.bot-v.top);
+function pct(p){if(!S.pool)return'';const c=(p/S.pool.hypePerKntq-1)*100;return(c>=0?'+':'')+c.toFixed(1)+'%'}
+function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);const LW=Math.round(w*.74);
+  // grid + price labels
+  cx.font='11px -apple-system,system-ui,sans-serif';cx.textBaseline='middle';
+  for(let i=1;i<6;i++){const y=h*i/6;cx.strokeStyle='rgba(148,163,184,.08)';cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.fillStyle='rgba(138,148,168,.8)';cx.textAlign='right';cx.fillText(t2p(yT(y,v,h)).toPrecision(4),w-4,y-8)}
+  // liquidity histogram (right side)
+  if(CH.liq){const segs=CH.liq.segs.filter(s=>s[1]>v.top&&s[0]<v.bot&&s[2]>0n);const mx=segs.reduce((a,s)=>s[2]>a?s[2]:a,1n);
+    for(const s of segs){const y1=tY(s[0],v,h),y2=tY(s[1],v,h),len=Number(s[2]*1000n/mx)/1000*(w-LW-6);
+      const inr=S.pool&&s[0]<=S.pool.tick&&S.pool.tick<s[1];cx.fillStyle=inr?'rgba(94,234,212,.75)':'rgba(167,139,250,.45)';cx.fillRect(w-len,Math.min(y1,y2),len,Math.max(1,Math.abs(y2-y1)-1))}}
+  // range band
+  const r=chRangeTicks();if(r){const ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);cx.fillStyle='rgba(94,234,212,.10)';cx.fillRect(0,ya,w,yb-ya)}
+  // my positions
+  Object.values(S.pos||{}).filter(p=>p.liquidity>0n).forEach(p=>{cx.setLineDash([2,4]);cx.strokeStyle='rgba(251,191,36,.55)';[p.tickLower,p.tickUpper].forEach(t=>{const y=tY(t,v,h);cx.beginPath();cx.moveTo(0,y);cx.lineTo(LW,y);cx.stroke()});cx.setLineDash([])});
+  // price line
+  if(CH.hist&&CH.hist.pts.length){const pts=CH.hist.pts,b0=CH.hist.head-Math.round(CH.hours*34800),b1=Math.max(CH.hist.head,pts[pts.length-1][0]);
+    const X=b=>(b-b0)/(b1-b0)*LW;cx.strokeStyle='#e8ecf4';cx.lineWidth=1.4;cx.beginPath();let lastY=null;
+    pts.forEach((q,i)=>{const x=X(q[0]),y=tY(q[1],v,h);if(i===0)cx.moveTo(x,y);else{cx.lineTo(x,lastY);cx.lineTo(x,y)}lastY=y});cx.lineTo(LW,lastY);cx.stroke();cx.lineWidth=1;
+    cx.fillStyle='rgba(138,148,168,.8)';cx.textAlign='left';cx.fillText(CH.hours+' 小时前',4,h-10)}
+  else{cx.fillStyle='rgba(138,148,168,.9)';cx.textAlign='left';cx.fillText(CH.loading?'读取价格走势中…':'',8,h/2)}
+  // current price
+  if(S.pool){const y=tY(S.pool.tick,v,h);cx.setLineDash([5,4]);cx.strokeStyle='rgba(255,255,255,.7)';cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.setLineDash([]);
+    lbl('现价 '+S.pool.hypePerKntq.toPrecision(4),LW-4,y,'rgba(255,255,255,.9)','#070a12','right')}
+  // handles
+  if(r){[['hi',r.tHiP,'上 '],['lo',r.tLoP,'下 ']].forEach(([k,t,nm])=>{const y=tY(t,v,h),act=CH.drag&&(CH.drag.k===k||CH.drag.k==='band');
+    cx.strokeStyle=act?'#fff':'#5eead4';cx.lineWidth=act?3:2;cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.lineWidth=1;
+    const p=t2p(t);lbl(nm+p.toPrecision(4)+'  '+pct(p),6,y,'#5eead4','#04211d','left');
+    // grip
+    cx.fillStyle='#fff';cx.beginPath();cx.roundRect?cx.roundRect(LW/2-22,y-7,44,14,7):cx.rect(LW/2-22,y-7,44,14);cx.fill();cx.fillStyle='#5eead4';for(let i=-1;i<=1;i++)cx.fillRect(LW/2-9,y-3+i*3+1,18,1.4)})}
+}
+function lbl(t,x,y,bg,fg,al){cx.font='600 11.5px -apple-system,system-ui,sans-serif';const tw=cx.measureText(t).width+12,x0=al==='right'?x-tw:x;cx.fillStyle=bg;cx.beginPath();cx.roundRect?cx.roundRect(x0,y-19,tw,17,6):cx.rect(x0,y-19,tw,17);cx.fill();cx.fillStyle=fg;cx.textAlign='left';cx.textBaseline='middle';cx.fillText(t,x0+6,y-10.5)}
+function chSet(tHi,tLo){const TS=C.TS;tHi=Math.round(tHi/TS)*TS;tLo=Math.round(tLo/TS)*TS;if(tLo-tHi<TS)return false;const [a,b]=chIn();a.value=t2p(tLo).toPrecision(5);b.value=t2p(tHi).toPrecision(5);return true}
+let _cc=null;function chAfter(){clearTimeout(_cc);_cc=setTimeout(()=>{if(CH.mode==='b'){try{store.set('lp_range',[$('bLo').value,$('bHi').value]);if(S.pool&&S.bal)$('calc').innerHTML=planText(buildPlan()).replace(/\n/g,'<br>')}catch(e){$('calc').textContent=e.message}}},150)}
+function evY(e){const rc=cv.getBoundingClientRect();return e.clientY-rc.top}
+cv.addEventListener('pointerdown',e=>{const r=chRangeTicks();if(!r)return;const {h}=chSize(),v=chView(),y=evY(e),ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);
+  let k=null;if(Math.abs(y-ya)<22&&Math.abs(y-ya)<=Math.abs(y-yb))k='hi';else if(Math.abs(y-yb)<22)k='lo';else if(y>ya&&y<yb)k='band';
+  if(!k)return;e.preventDefault();cv.setPointerCapture(e.pointerId);CH.drag={k,y0:y,a:r.tHiP,b:r.tLoP};chDraw()});
+cv.addEventListener('pointermove',e=>{if(!CH.drag)return;e.preventDefault();const {h}=chSize(),v=chView(),y=evY(e),d=CH.drag,dt=(y-d.y0)/h*(v.bot-v.top);
+  let a=d.a,b=d.b;if(d.k==='hi')a=Math.min(d.a+dt,d.b-C.TS);else if(d.k==='lo')b=Math.max(d.b+dt,d.a+C.TS);else{a+=dt;b+=dt}
+  // auto-expand view when near edge
+  if(y<12)CH.center-=CH.span*.02;if(y>h-12)CH.center+=CH.span*.02;
+  if(chSet(a,b)){chDraw();chAfter()}});
+const chEnd=e=>{if(!CH.drag)return;CH.drag=null;chDraw();chAfter()};cv.addEventListener('pointerup',chEnd);cv.addEventListener('pointercancel',chEnd);
+['bLo','bHi','mLo','mHi'].forEach(id=>$(id).addEventListener('input',()=>chDraw()));
+document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{CH.mode=b.dataset.cm;document.querySelectorAll('[data-cm]').forEach(x=>x.className=x===b?'':'alt');CH.span=null;chDraw()});
+document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{CH.hours=+b.dataset.ch;document.querySelectorAll('[data-ch]').forEach(x=>x.className=x===b?'':'alt');loadHist()});
+$('czIn').onclick=()=>{chView();CH.span=Math.max(400,CH.span/1.5);chDraw()};$('czOut').onclick=()=>{chView();CH.span*=1.5;chDraw()};
+$('czFit').onclick=()=>{CH.span=null;chDraw()};
+async function loadLiq(){try{CH.liq=await rpc(p=>liqDist(p,LP),20000);CH.lastLiq=Date.now();
+  // align segment L with pool active L (ticks outside scanned words)
+  if(S.pool){const s=CH.liq.segs.find(s=>s[0]<=S.pool.tick&&S.pool.tick<s[1]);if(s){const dlt=S.pool.liquidity-s[2];CH.liq.segs.forEach(x=>x[2]+=dlt)}}chDraw()}catch(e){console.warn('liq',e)}}
+async function loadHist(){CH.loading=true;CH.hist=null;chDraw();try{CH.hist=await rpc(p=>priceHist(p,LP,CH.hours,(d,t)=>{$('chSt').textContent=`走势 ${Math.round(d/t*100)}%`}),90000);$('chSt').textContent=''}catch(e){$('chSt').textContent='走势读取失败'}CH.loading=false;chDraw()}
+function chTick(){if(CH.hist&&S.pool){CH.hist.pts.push([CH.hist.head+Math.round((Date.now()/1000-CH.hist.headTs)*9.67),S.pool.tick])}if(Date.now()-CH.lastLiq>120e3)loadLiq();chDraw()}
+window.addEventListener('resize',chDraw);
+
+(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>chDraw());
+  setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000)})();
 </script></body></html>
