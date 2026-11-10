@@ -24,6 +24,9 @@ input,select{background:rgba(0,0,0,.35);color:var(--txt);border:1px solid var(--
 input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(94,234,212,.15)}
 input[type=radio],input[type=checkbox]{accent-color:var(--acc)}
 label{display:inline-flex;align-items:center;gap:6px}
+input[type=range]{-webkit-appearance:none;appearance:none;height:8px;border-radius:999px;background:linear-gradient(90deg,var(--acc),var(--acc2));border:0;box-shadow:none;min-width:200px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(94,234,212,.35),0 2px 8px rgba(0,0,0,.4);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 0 0 4px rgba(94,234,212,.35)}
 .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
 .kv div,.pos div{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
 .kv b,.pos b{display:block;font-size:11.5px;color:var(--mut);font-weight:500;margin-bottom:2px;letter-spacing:.3px}
@@ -58,7 +61,9 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 <div class="card"><h2>建仓</h2>
 <div class="row">KNTQ 价格区间 下 <input id="bLo" type="number" step="any" style="width:95px"> 上 <input id="bHi" type="number" step="any" style="width:95px"> HYPE</div>
 <div class="row" style="margin-top:6px"><span class="mut">快捷：</span><button class="alt" data-r="10">现价±10%</button><button class="alt" data-r="20">±20%</button><button class="alt" data-r="50">±50%</button><button class="alt" data-r="full">全区间</button><button class="alt" id="bLast">沿用上次</button></div>
-<div class="row" style="margin-top:6px"><label><input type="radio" name="amode" value="bal" checked style="width:auto"> 用钱包余额，留 gas</label> <input id="iGas" type="number" step="any" value="0.3" style="width:60px"> HYPE</div>
+<div class="row" style="margin-top:6px"><label><input type="radio" name="amode" value="bal" checked style="width:auto"> 用钱包余额</label> <b id="pctV" style="font-size:16px;min-width:48px">100%</b><span class="mut">留 gas</span> <input id="iGas" type="number" step="any" value="0.3" style="width:60px"> <span class="mut">HYPE</span></div>
+<div class="row" style="margin-top:8px"><input id="iPct" type="range" min="1" max="100" step="1" value="100" class="grow" style="width:auto;padding:0"></div>
+<div class="row" style="margin-top:6px"><button class="alt" data-p="25">25%</button><button class="alt" data-p="50">50%</button><button class="alt" data-p="75">75%</button><button class="alt" data-p="100">最大</button></div>
 <div class="row" style="margin-top:4px"><label><input type="radio" name="amode" value="bud" style="width:auto"> 预算</label> <input id="iBud" type="number" step="any" placeholder="美元" style="width:90px"> 美元 <span class="mut">（余额不够时自动缩到能放的最大量）</span></div>
 <div class="row" style="margin-top:6px">滑点 <input id="iSlip" type="number" value="1" step="any" style="width:60px">%
 <button id="bCalc" class="alt">预估</button><button id="bMint">建仓</button></div>
@@ -68,7 +73,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 <div class="card"><div class="row"><h2 class="grow">我的仓位</h2>
 <select id="sort"><option value="val">按价值</option><option value="fee">按待领</option><option value="apr">按年化</option><option value="id">按编号</option></select>
 <label class="mut"><input type="checkbox" id="hideEmpty" checked style="width:auto"> 隐藏已撤空</label></div>
-<div class="row"><button class="alt" id="bScan">扫描链上仓位</button><input id="iAdd" placeholder="编号，如 613,617" style="width:100px"><button class="alt" id="bAdd">添加</button><button class="alt" id="bRef">刷新</button></div>
+<div class="row"><button class="alt" id="bScan">扫描链上仓位</button><input id="iAdd" placeholder="编号，如 613,617" style="width:150px"><button class="alt" id="bAdd">添加</button><button class="alt" id="bRef">刷新</button></div>
 <div id="positions"><p class="mut">读取中…</p></div></div>
 
 <div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（含手续费）→ 按新区间把多出的 KNTQ 换成 HYPE（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
@@ -304,7 +309,8 @@ function range(){const lo=+$('bLo').value,hi=+$('bHi').value;const r=p2t(lo,hi);
 function buildPlan(){ // uses fresh S.pool / S.bal
   if(!S.bal)throw new Error('先连接钱包');const {tl,tu}=range(),sp=S.pool.sqrtP,sa=LP.sqrtAt(tl),sb=LP.sqrtAt(tu);
   const slip=BigInt(Math.round(+$('iSlip').value*100)),gas=E.parseEther(String(+$('iGas').value||0));
-  const H=S.bal.hype>gas?S.bal.hype-gas:0n,K=S.bal.kntq;
+  const pct=BigInt(document.querySelector('input[name=amode]:checked').value==='bal'?+$('iPct').value:100);
+  const H=(S.bal.hype>gas?S.bal.hype-gas:0n)*pct/100n,K=S.bal.kntq*pct/100n;
   const Hc=H*10000n/(10000n+slip),Kc=K*10000n/(10000n+slip); // leave room for slippage
   let L=LP.liquidityFor(sp,sa,sb,Hc,Kc),why='';
   if(document.querySelector('input[name=amode]:checked').value==='bud'){const bud=+$('iBud').value;if(!(bud>0))throw new Error('填预算');if(!S.hypeUsd)throw new Error('拿不到 HYPE 美元价');
@@ -408,6 +414,8 @@ $('mGo').onclick=()=>migrate().catch(e=>{log('移仓出错 '+(e.shortMessage||e.
 $('bConn').onclick=()=>connect().catch(e=>{log('连接失败 '+(e.shortMessage||e.message),'bad');alert(e.message)});
 $('bCalc').onclick=()=>calc().catch(e=>alert(e.message));$('bMint').onclick=()=>mintQuick().catch(e=>{log('建仓出错 '+(e.shortMessage||e.message),'bad');alert(e.shortMessage||e.message)});
 document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{const r=b.dataset.r;if(r==='full'){$('bLo').value=0;$('bHi').value=0}else{if(!S.pool)return alert('还没读到价格');const p=S.pool.hypePerKntq;$('bLo').value=(p*(1-r/100)).toPrecision(5);$('bHi').value=(p*(1+r/100)).toPrecision(5)}calc().catch(()=>{})});
+let _pt=null;const setPct=v=>{$('iPct').value=v;$('pctV').textContent=v+'%';document.querySelector('input[name=amode][value=bal]').checked=true;clearTimeout(_pt);_pt=setTimeout(()=>{try{if(S.pool&&S.bal)$('calc').innerHTML=planText(buildPlan()).replace(/\n/g,'<br>')}catch(e){$('calc').textContent=e.message}},120)};
+$('iPct').oninput=()=>setPct($('iPct').value);document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>setPct(b.dataset.p));
 $('bLast').onclick=()=>{const r=store.get('lp_range',null);if(!r)return alert('还没有上次的区间');$('bLo').value=r[0];$('bHi').value=r[1];calc().catch(()=>{})};
 {const r=store.get('lp_range',null);$('bLo').value=r?r[0]:'0.004608';$('bHi').value=r?r[1]:'0.005196'}
 $('bAdd').onclick=()=>{const v=$('iAdd').value.split(/[^0-9]+/).filter(Boolean);v.forEach(addId);if(v.length)refreshPositions()};
