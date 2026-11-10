@@ -48,10 +48,11 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 .wrap>p.mut{text-align:center;line-height:1.7;margin-top:18px}
 @media(max-width:560px){.wrap{padding:12px 10px 30px}.card{padding:14px;border-radius:16px}button{padding:10px 14px}}
 </style></head><body><div class="wrap">
-<h1>KNTQ/HYPE · Uniswap v4 LP 工具 <span class="mut">Elysium 99901 · 费率 1% · 无 hook</span></h1>
+<h1>KNTQ/HYPE · Uniswap v4 LP 工具 <span class="mut">Elysium 99901 · 费率 <span id="hFee">1%</span> · 无 hook</span></h1>
 
 <div class="card"><div class="row"><button id="bConn">连接钱包</button><span id="acct" class="mut grow">未连接</span>
 <span id="rpcSt" class="mut"></span></div>
+<div class="row" style="margin-top:8px"><b>当前池子</b><select id="poolSel"><option value="1">1% 池（0xc96b）</option><option value="03">0.3% 池（0xf9b8）</option></select><span class="mut grow">建仓、移仓、图表都按这个池子；仓位两个池子都显示</span></div>
 <div class="kv" style="margin-top:8px">
 <div><b>HYPE 余额</b><span id="vH">-</span></div><div><b>KNTQ 余额</b><span id="vK">-</span></div>
 <div><b>池价 (HYPE/KNTQ)</b><span id="vP">-</span></div><div><b>KNTQ 美元价</b><span id="vKU">-</span></div>
@@ -83,7 +84,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 <div class="row mut" style="margin:4px 0 8px">上下拖青色线改上/下限，拖中间整体平移。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
 </div>
 
-<div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（含手续费）→ 按新区间把多出的 KNTQ 换成 HYPE（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
+<div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（两个池子都撤，含手续费）→ 在上面选的「当前池子」建仓。→ 按新区间把多出的 KNTQ 换成 HYPE（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
 <div class="row" style="margin-top:6px">新区间 KNTQ 价格 下 <input id="mLo" type="number" step="any" value="0.005197" style="width:95px"> 上 <input id="mHi" type="number" step="any" value="0.006606" style="width:95px"> HYPE</div>
 <div class="row" style="margin-top:6px">留 gas <input id="mGas" type="number" step="any" value="0.3" style="width:60px"> HYPE <button class="alt" id="mCalc">预估</button><button id="mGo">开始移仓</button></div>
 <div id="mInfo" class="mut" style="margin-top:6px"></div></div>
@@ -107,7 +108,14 @@ const C = {
   UR: '0xa13f7611115752deb2b13813bdde16a5073e4b45',
   POOL_ID: '0xc96bfd21d36f8e7252f0d80fcb5f3bcacdf47c8b927b20711104713ebeb383ac',
 };
+const POOLS = {
+  '1': { FEE: 10000, TS: 200, POOL_ID: '0xc96bfd21d36f8e7252f0d80fcb5f3bcacdf47c8b927b20711104713ebeb383ac', NAME: '1%' },
+  '03': { FEE: 3000, TS: 60, POOL_ID: '0xf9b8a9101438145d62c9f03156b203c6c573931167e2d36f9061a32575706c8a', NAME: '0.3%' },
+};
 const KEY = [C.NATIVE, C.KNTQ, C.FEE, C.TS, C.HOOKS];
+function setPool(k) { const q = POOLS[k] || POOLS['1']; C.FEE = q.FEE; C.TS = q.TS; C.POOL_ID = q.POOL_ID; C.POOL_NAME = q.NAME; C.POOL_K = POOLS[k] ? k : '1'; KEY[2] = C.FEE; KEY[3] = C.TS; }
+try { let k = null; if (typeof location !== 'undefined') { const u = new URLSearchParams(location.search).get('pool'); if (u && POOLS[u]) { k = u; try { localStorage.setItem('lp_pool', JSON.stringify(u)) } catch (e) {} } } if (!k && typeof localStorage !== 'undefined') { try { k = JSON.parse(localStorage.getItem('lp_pool')) } catch (e) {} } setPool(k || '1'); } catch (e) { setPool('1'); }
+const poolByFee = fee => Object.values(POOLS).find(q => q.FEE === Number(fee));
 const Q96 = 2n ** 96n, Q128 = 2n ** 128n, M256 = 2n ** 256n;
 const ab = E.AbiCoder.defaultAbiCoder();
 const POSM_ABI = [
@@ -129,7 +137,7 @@ async function withRpc(fn) { // failover across RPCs
   let last; for (let i = 0; i < C.rpcs.length; i++) { try { return await fn(provider(i), i); } catch (e) { last = e; } } throw last;
 }
 const slotAdd = (s, n) => E.toBeHex(BigInt(s) + BigInt(n), 32);
-const stateSlot = () => E.keccak256(ab.encode(['bytes32', 'uint256'], [C.POOL_ID, 6]));
+const stateSlot = (id) => E.keccak256(ab.encode(['bytes32', 'uint256'], [id || C.POOL_ID, 6]));
 const s24 = v => { v = Number(v & 0xffffffn); return v >= 0x800000 ? v - 0x1000000 : v; };
 
 function mcRunner(p) { // batches eth_calls in one tick into a single Multicall3 aggregate3
@@ -141,8 +149,8 @@ function mcRunner(p) { // batches eth_calls in one tick into a single Multicall3
     catch (e) { b.forEach(x => x.rej(e)); } };
   return { provider: p, call: tx => new Promise((res, rej) => { q.push({ tx, res, rej }); if (!t) t = setTimeout(flush, 5); }) };
 }
-async function readPool(p) {
-  const pm = new E.Contract(C.PM, PMA, p); const ss = stateSlot();
+async function readPool(p, id) {
+  const pm = new E.Contract(C.PM, PMA, p); const ss = stateSlot(id);
   const w = await pm['extsload(bytes32,uint256)'](ss, 4);
   const s0 = BigInt(w[0]);
   const sqrtP = s0 & ((1n << 160n) - 1n); const tick = s24(s0 >> 160n);
@@ -158,10 +166,12 @@ async function readPosition(p, tokenId, pool) {
   const posm = new E.Contract(C.POSM, POSM_ABI, p);
   const [[key, info], liq, owner] = await Promise.all([posm.getPoolAndPositionInfo(tokenId), posm.getPositionLiquidity(tokenId), posm.ownerOf(tokenId).catch(() => null)]);
   const tl = s24(info >> 8n), tu = s24(info >> 32n);
-  const isOurPool = key[1].toLowerCase() === C.KNTQ && Number(key[2]) === C.FEE && key[0] === C.NATIVE;
+  const pp = poolByFee(key[2]);
+  const isOurPool = key[1].toLowerCase() === C.KNTQ && !!pp && Number(key[3]) === pp.TS && key[0] === C.NATIVE && key[4] === C.HOOKS;
   if (!isOurPool) return { tokenId, isOurPool, owner };
-  pool = pool || await readPool(p);
-  const pm = new E.Contract(C.PM, PMA, p); const ss = stateSlot();
+  const same = pp.POOL_ID === C.POOL_ID;
+  pool = same ? (pool || await readPool(p)) : await readPool(p, pp.POOL_ID);
+  const pm = new E.Contract(C.PM, PMA, p); const ss = stateSlot(pp.POOL_ID);
   const pkey = E.solidityPackedKeccak256(['address', 'int24', 'int24', 'bytes32'], [C.POSM, tl, tu, E.toBeHex(tokenId, 32)]);
   const ps = E.keccak256(ab.encode(['bytes32', 'bytes32'], [pkey, slotAdd(ss, 6)]));
   const [pw, lo, up] = await Promise.all([pm['extsload(bytes32,uint256)'](ps, 3), readTick(pm, ss, tl), readTick(pm, ss, tu)]);
@@ -171,7 +181,7 @@ async function readPosition(p, tokenId, pool) {
   const fee0 = (((in0 - BigInt(pw[1])) % M256 + M256) % M256) * L / Q128;
   const fee1 = (((in1 - BigInt(pw[2])) % M256 + M256) % M256) * L / Q128;
   const { a0, a1 } = amountsForLiquidity(pool.sqrtP, sqrtAt(tl), sqrtAt(tu), L);
-  return { tokenId, isOurPool, owner, tickLower: tl, tickUpper: tu, liquidity: L, amount0: a0, amount1: a1, fee0, fee1, inRange: pool.tick >= tl && pool.tick < tu };
+  return { tokenId, isOurPool, owner, poolName: pp.NAME, otherPool: !same, tickLower: tl, tickUpper: tu, liquidity: L, amount0: a0, amount1: a1, fee0, fee1, inRange: pool.tick >= tl && pool.tick < tu };
 }
 function sqrtAt(t) { // float approx, fine for estimates (contract computes exact amounts)
   return BigInt(Math.round(Math.pow(1.0001, t / 2) * 2 ** 48)) * (2n ** 48n);
@@ -276,7 +286,7 @@ async function scanPositions(p, addr, blocks = 200000, step = 9999, onProgress) 
   }
   return [...ids];
 }
-const api = { buildRemoveMany, buildP2ApproveUR, p2AllowUR, buildSwapK2H, swapPlan, mcRunner, C, KEY, A, E, provider, withRpc, readPool, readPosition, sqrtAt, amountsForLiquidity, liquidityFor, rangeTicks, buildMint, buildIncrease, buildCollect, buildRemove, balances, buildApproveP2, buildP2Approve, scanPositions, POSM_ABI };
+const api = { POOLS, setPool, buildRemoveMany, buildP2ApproveUR, p2AllowUR, buildSwapK2H, swapPlan, mcRunner, C, KEY, A, E, provider, withRpc, readPool, readPosition, sqrtAt, amountsForLiquidity, liquidityFor, rangeTicks, buildMint, buildIncrease, buildCollect, buildRemove, balances, buildApproveP2, buildP2Approve, scanPositions, POSM_ABI };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LP = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -307,7 +317,7 @@ const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch
 const f=(x,d=4)=>Number(E.formatEther(x)).toLocaleString(undefined,{maximumFractionDigits:d});
 const usd=x=>x==null||isNaN(x)?'-':'$'+x.toLocaleString(undefined,{maximumFractionDigits:2});
 function log(m,cls=''){const t=new Date().toLocaleTimeString();const l=store.get('lp_log',[]);l.unshift(`${t} ${m}`);store.set('lp_log',l.slice(0,300));$('log').innerHTML=l.map(x=>`<div class="${cls}">${x}</div>`).join('');}
-log('页面加载');
+log('页面加载，当前池子 '+C.POOL_NAME);$('hFee').textContent=C.POOL_NAME;$('poolSel').value=C.POOL_K;$('poolSel').onchange=e=>{store.set('lp_pool',e.target.value);location.href=location.pathname+'?pool='+e.target.value};
 let P=LP.provider(0);
 const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('超时')),ms))]);
 let P0=LP.provider(0);
@@ -386,7 +396,7 @@ async function _refreshPositions(){
   $('positions').innerHTML=out.filter(p=>!($('hideEmpty').checked&&p.liquidity===0n&&p.fee<0.001)).map(p=>{S.pos[p.id]=p;
     const mine=S.acct&&p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase();const pl=t=>(1/Math.pow(1.0001,t)).toPrecision(4);
     const lo=1/Math.pow(1.0001,p.tickUpper),hi=1/Math.pow(1.0001,p.tickLower),cur=S.pool.hypePerKntq,pc=Math.max(0,Math.min(100,(cur-lo)/(hi-lo)*100));
-    return `<div class="pcard"><div class="row"><b style="font-size:16px">#${p.id}</b><span class="pill ${p.inRange?'ok':'warn'}">${p.liquidity===0n?'已撤空':p.inRange?'区间内':'区间外，不赚手续费'}</span><span class="grow"></span>${mine?'':'<span class="warn">非当前钱包</span>'}</div>
+    return `<div class="pcard"><div class="row"><b style="font-size:16px">#${p.id}</b><span class="pill">${p.poolName||""} 池</span><span class="pill ${p.inRange?'ok':'warn'}">${p.liquidity===0n?'已撤空':p.inRange?'区间内':'区间外，不赚手续费'}</span><span class="grow"></span>${mine?'':'<span class="warn">非当前钱包</span>'}</div>
     ${p.liquidity===0n?'':`<div class="bar"><i></i><em style="left:${pc}%"></em></div><div class="barlbl"><span>${pl(p.tickUpper)}</span><span>现价 ${cur.toPrecision(4)}</span><span>${pl(p.tickLower)}</span></div>`}
     <div class="pos"><div><b>本金（现值）</b>${usd(p.val)}<br><span class="mut">${f(p.amount0)} HYPE + ${f(p.amount1,1)} KNTQ</span></div>
     <div><b>待领收益</b>${usd(p.fee)}<br><span class="mut">${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ</span></div>
@@ -417,7 +427,7 @@ async function mEstimate(){if(!S.acct)throw new Error('先连接钱包');await r
   const H2=H+(sp.out||0n),K2=K-sp.dK;const L=LP.liquidityFor(S.pool.sqrtP,LP.sqrtAt(r.tl),LP.sqrtAt(r.tu),H2,K2);
   const share=Number(L)/Number(S.pool.liquidity-live.reduce((a,p)=>a+p.liquidity,0n)+L)*100;
   const inr=S.pool.tick>=r.tl&&S.pool.tick<r.tu;
-  $('mInfo').innerHTML=`新区间 <b>${r.lo.toPrecision(5)} ~ ${r.hi.toPrecision(5)}</b> HYPE/KNTQ（tick ${r.tl}~${r.tu}，现价 ${S.pool.hypePerKntq.toPrecision(5)}${inr?'':' <span class="bad">不在新区间内</span>'}）<br>撤出 ${live.length} 个仓位：${live.map(p=>'#'+p.id).join(' ')}；合计可用约 ${f(H)} HYPE + ${f(K,1)} KNTQ（已留 gas）<br>`+(sp.needH2K?'<span class="warn">这个区间需要更多 KNTQ，本工具不换 HYPE→KNTQ，多出的 HYPE 会留在钱包</span><br>':sp.dK>0n?`需卖出约 <b>${f(sp.dK,1)} KNTQ → ${f(sp.out)} HYPE</b>（池费 1%）<br>`:'')+`新仓约 ${f(H2)} HYPE + ${f(K2,1)} KNTQ，流动性 ${Number(L).toExponential(3)}，预计占活跃流动性 ${share.toFixed(1)}%`;
+  $('mInfo').innerHTML=`目标池子 <b>${C.POOL_NAME}</b>，新区间 <b>${r.lo.toPrecision(5)} ~ ${r.hi.toPrecision(5)}</b> HYPE/KNTQ（tick ${r.tl}~${r.tu}，现价 ${S.pool.hypePerKntq.toPrecision(5)}${inr?'':' <span class="bad">不在新区间内</span>'}）<br>撤出 ${live.length} 个仓位：${live.map(p=>'#'+p.id).join(' ')}；合计可用约 ${f(H)} HYPE + ${f(K,1)} KNTQ（已留 gas）<br>`+(sp.needH2K?'<span class="warn">这个区间需要更多 KNTQ，本工具不换 HYPE→KNTQ，多出的 HYPE 会留在钱包</span><br>':sp.dK>0n?`需卖出约 <b>${f(sp.dK,1)} KNTQ → ${f(sp.out)} HYPE</b>（池费 1%）<br>`:'')+`新仓约 ${f(H2)} HYPE + ${f(K2,1)} KNTQ，流动性 ${Number(L).toExponential(3)}，预计占活跃流动性 ${share.toFixed(1)}%`;
   return{r,live,sp}}
 async function migrate(){const slip=BigInt(Math.round(+$('iSlip').value*100));let {r,live}=await mEstimate();
   if(!await confirmBox('一键移仓','将依次：\n1. 撤出 '+live.map(p=>'#'+p.id).join(' ')+'（含手续费）\n2. 如需要，授权并把多出的 KNTQ 换成 HYPE\n3. 按 '+r.lo.toPrecision(5)+' ~ '+r.hi.toPrecision(5)+' 建新仓\n每步都要你在钱包签名，任何一步取消都会停下，已完成的步骤不会回滚（撤出的币会在你钱包里）。'))return;
