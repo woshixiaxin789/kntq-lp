@@ -98,7 +98,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 const E = (typeof module !== 'undefined' && module.exports) ? require('ethers') : root.ethers;
 const C = {
   chainId: 99901,
-  rpcs: ['https://rpc.asphodelhq.com', 'https://rpc.elysium.kinetiq.xyz'],
+  rpcs: ['https://rpc.elysium.kinetiq.xyz', 'https://rpc.asphodelhq.com'],
   PM: '0xe2e105d3f7209a9da11f83ccf3e7398a753823f1',
   POSM: '0x1d1c51b9d07fd27d36412a2b66cc23d19eb3e518',
   PERMIT2: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
@@ -323,8 +323,9 @@ function log(m,cls=''){const t=new Date().toLocaleTimeString();const l=store.get
 log('页面加载，当前池子 '+C.POOL_NAME);$('hFee').textContent=C.POOL_NAME;$('poolSel').value=C.POOL_K;$('poolSel').onchange=e=>{store.set('lp_pool',e.target.value);location.href=location.pathname+'?pool='+e.target.value};
 let P=LP.provider(0);
 const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('超时')),ms))]);
-let P0=LP.provider(0);
-async function rpc(fn,ms=12000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<4;t++){try{const r=await TO(fn(t===0?P0:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',t,e);await new Promise(r=>setTimeout(r,1500*(t+1)))}}}throw last}
+let PS=null;const prov=()=>PS||(PS=C.rpcs.map((_,i)=>LP.provider(i)));
+async function rpcSeq(fn,ms=20000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<2;t++){try{const r=await TO(fn(t===0?prov()[i]:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',i,t,e);await new Promise(r=>setTimeout(r,1000))}}}throw last}
+async function rpc(fn,ms=8000){let last;for(let t=0;t<3;t++){const ps=t===0?prov():C.rpcs.map((_,i)=>LP.provider(i));try{const r=await Promise.any(ps.map((p,i)=>TO(fn(p),ms).then(v=>{$('rpcSt').textContent='RPC '+(i+1);return v})));return r}catch(e){last=(e.errors&&e.errors[0])||e;console.warn('rpc race',t,e);$('rpcSt').textContent='RPC 重试 '+(t+1);await new Promise(r=>setTimeout(r,1000))}}throw last}
 async function hypePrice(){try{const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),6000);const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}',signal:ac.signal});clearTimeout(tm);const j=await r.json();const v=parseFloat(j.HYPE);if(v>0){S.hypeUsd=v;S.hypeUsdAt=Date.now()}}catch(e){}}
 function stale(){const age=(Date.now()-S.hypeUsdAt)/1000;$('stale').textContent=!S.hypeUsdAt?'(取价失败)':age>90?`(已过期 ${Math.round(age)}s)`:'';$('stale').className=age>90||!S.hypeUsdAt?'warn':'mut'}
 async function refreshTop(){
@@ -460,7 +461,7 @@ $('bLast').onclick=()=>{const r=store.get('lp_range',null);if(!r)return alert('�
 {const r=store.get('lp_range',null);$('bLo').value=r?r[0]:'0.004608';$('bHi').value=r?r[1]:'0.005196'}
 $('bAdd').onclick=()=>{const v=$('iAdd').value.split(/[^0-9]+/).filter(Boolean);v.forEach(addId);if(v.length)refreshPositions()};
 $('bRef').onclick=()=>refreshTop().then(refreshPositions);$('sort').onchange=refreshPositions;$('hideEmpty').onchange=refreshPositions;
-$('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpc(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
+$('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpcSeq(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
 // ===== 可拖动区间图表 (v14) =====
 const CH={mode:'b',hours:6,hist:null,liq:null,span:null,center:null,drag:null,loading:false,lastLiq:0};
