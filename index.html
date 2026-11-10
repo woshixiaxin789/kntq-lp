@@ -98,7 +98,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 const E = (typeof module !== 'undefined' && module.exports) ? require('ethers') : root.ethers;
 const C = {
   chainId: 99901,
-  rpcs: ['https://rpc.asphodelhq.com'],
+  rpcs: ['https://rpc.asphodelhq.com', 'https://rpc.elysium.kinetiq.xyz'],
   PM: '0xe2e105d3f7209a9da11f83ccf3e7398a753823f1',
   POSM: '0x1d1c51b9d07fd27d36412a2b66cc23d19eb3e518',
   PERMIT2: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
@@ -303,11 +303,14 @@ async function liqDist(p,LP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAbiCoder()
  // build liquidity steps: L at current = pool.liquidity; walk
  let segs=[];let L=0n;for(let i=0;i<pts.length;i++){L+=pts[i][1];if(i+1<pts.length)segs.push([pts[i][0],pts[i+1][0],L])}
  return{pool,segs}}
-async function priceHist(p,LP,hours=6,onP){const E=LP.E,C=LP.C;const topic=E.id('Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)');
- const head=await p.getBlockNumber();const blocks=Math.round(hours*60*580);const out=[];const chunks=[];
- for(let b=head;b>head-blocks;b-=10000)chunks.push([Math.max(b-9999,head-blocks),b]);let i=0,done=0;
- async function w(){while(i<chunks.length){const [a,b]=chunks[i++];for(let t=0;t<5;t++){try{const ls=await p.getLogs({address:C.PM,topics:[topic,C.POOL_ID],fromBlock:a,toBlock:b});for(const l of ls){const d=E.AbiCoder.defaultAbiCoder().decode(['int128','int128','uint160','uint128','int24','uint24'],l.data);out.push([l.blockNumber,Number(d[4])])}break}catch(e){await new Promise(r=>setTimeout(r,1200*(t+1)))}}done++;onP&&onP(done,chunks.length)}}
- await Promise.all([w(),w()]);out.sort((a,b)=>a[0]-b[0]);const blk=await p.getBlock(head);return{head,headTs:blk.timestamp,pts:out}}
+async function priceHist(p,LP,hours=6,onP,isStale){const E=LP.E,C=LP.C;const topic=E.id('Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)');
+ const ps=[p];for(let k=0;k<C.rpcs.length;k++)ps.push(LP.provider(k));
+ const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),ms))]);
+ let head=null;for(let t=0;t<6&&head==null;t++){try{head=await TO(ps[t%ps.length].getBlockNumber(),8000)}catch(e){}}if(head==null)throw new Error('head');
+ const blocks=Math.round(hours*60*580);const out=[];const chunks=[];
+ for(let b=head;b>head-blocks;b-=10000)chunks.push([Math.max(b-9999,head-blocks),b]);let i=0,done=0,fail=0;
+ async function w(wi){while(i<chunks.length){if(isStale&&isStale())return;const [a,b]=chunks[i++];let ok=false;for(let t=0;t<6&&!ok;t++){const pr=ps[(wi+t)%ps.length];try{const ls=await TO(pr.getLogs({address:C.PM,topics:[topic,C.POOL_ID],fromBlock:a,toBlock:b}),15000);for(const l of ls){const d=E.AbiCoder.defaultAbiCoder().decode(['int128','int128','uint160','uint128','int24','uint24'],l.data);out.push([l.blockNumber,Number(d[4])])}ok=true}catch(e){await new Promise(r=>setTimeout(r,800*(t+1)))}}if(!ok)fail++;done++;onP&&onP(done,chunks.length)}}
+ await Promise.all([0,1,2].map(w));if(isStale&&isStale())throw new Error('stale');if(fail>chunks.length/3)throw new Error('logs');out.sort((a,b)=>a[0]-b[0]);let headTs=Math.floor(Date.now()/1000);try{headTs=(await TO(ps[1].getBlock(head),8000)).timestamp}catch(e){}return{head,headTs,pts:out}}
 if(typeof module!=='undefined')module.exports={liqDist,priceHist};else{window.liqDist=liqDist;window.priceHist=priceHist}
 </script>
 <script>
@@ -524,7 +527,7 @@ $('czFit').onclick=()=>{chFix();CH.span=null;chDraw();chAfter()};
 async function loadLiq(){try{CH.liq=await rpc(p=>liqDist(p,LP),20000);CH.lastLiq=Date.now();
   // align segment L with pool active L (ticks outside scanned words)
   if(S.pool){const s=CH.liq.segs.find(s=>s[0]<=S.pool.tick&&S.pool.tick<s[1]);if(s){const dlt=S.pool.liquidity-s[2];CH.liq.segs.forEach(x=>x[2]+=dlt)}}chDraw()}catch(e){console.warn('liq',e)}}
-async function loadHist(){CH.loading=true;CH.hist=null;chDraw();try{CH.hist=await rpc(p=>priceHist(p,LP,CH.hours,(d,t)=>{$('chSt').textContent=`走势 ${Math.round(d/t*100)}%`}),90000);$('chSt').textContent=''}catch(e){$('chSt').textContent='走势读取失败'}CH.loading=false;chDraw()}
+let _hg=0;async function loadHist(){const g=++_hg;CH.loading=true;CH.hist=null;$('chSt').textContent='走势 0%';chDraw();try{const h=await priceHist(P0,LP,CH.hours,(d,t)=>{if(g===_hg)$('chSt').textContent=`走势 ${Math.round(d/t*100)}%`},()=>g!==_hg);if(g!==_hg)return;CH.hist=h;$('chSt').textContent=''}catch(e){if(g!==_hg)return;$('chSt').innerHTML='走势读取失败，<a href="#" id="chRetry">点这里重试</a>';const a=document.getElementById('chRetry');if(a)a.onclick=ev=>{ev.preventDefault();loadHist()}}CH.loading=false;chDraw()}
 function chTick(){if(CH.hist&&S.pool){CH.hist.pts.push([CH.hist.head+Math.round((Date.now()/1000-CH.hist.headTs)*9.67),S.pool.tick])}if(Date.now()-CH.lastLiq>120e3)loadLiq();chDraw()}
 window.addEventListener('resize',chDraw);
 
