@@ -2,7 +2,7 @@
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KNTQ/HYPE LP 工具 · Elysium</title>
 <style>
-:root{--bg:#0f1012;--card:#17181b;--card2:#1d1f23;--line:rgba(255,255,255,.07);--txt:#e6e3dc;--mut:#8b8a85;--acc:#8fb5a6;--acc2:#a59bbf;--ok:#8fb5a6;--warn:#d4b06a;--bad:#c97a6d;--btn:#3d5f55;--btnhi:#466c61}
+:root{--bg:#0f1012;--card:#17181b;--card2:#1d1f23;--line:rgba(255,255,255,.07);--txt:#e6e3dc;--mut:#8b8a85;--acc:#c9b28a;--acc2:#a59bbf;--ok:#cdb68c;--warn:#d4b06a;--bad:#c97a6d;--btn:#36373c;--btnhi:#3f4046}
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--txt);min-height:100vh;background:var(--bg);-webkit-font-smoothing:antialiased}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.06;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
@@ -14,15 +14,15 @@ h2{font-size:15px;font-weight:600;margin:0 0 12px;display:flex;align-items:cente
 h2::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--acc);opacity:.8}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.25)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.grow{flex:1}
-button{background:var(--btn);color:#eef1ec;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;transition:transform .08s,background .15s;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 1px 2px rgba(0,0,0,.35)}
+button{background:var(--btn);color:#e6d6b2;border:1px solid rgba(201,178,138,.28);border-radius:10px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;transition:transform .08s,background .15s;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 1px 2px rgba(0,0,0,.35)}
 button:hover{background:var(--btnhi)}button:active{transform:scale(.97);box-shadow:inset 0 1px 3px rgba(0,0,0,.35)}
 button.alt{background:var(--card2);border:1px solid var(--line);font-weight:500;color:var(--txt);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 button.alt:hover{background:#24262b}
 button.red{background:#7d3b35;color:#f3e6e3;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 2px rgba(0,0,0,.35)}button.red:hover{background:#8b433c}
 button:disabled{opacity:.4;cursor:not-allowed}
 input,select{background:#121315;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;width:110px;outline:none;transition:border-color .15s;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
-input:focus,select:focus{border-color:rgba(143,181,166,.5)}
-input[type=radio],input[type=checkbox]{accent-color:var(--btn);box-shadow:none}
+input:focus,select:focus{border-color:rgba(201,178,138,.5)}
+input[type=radio],input[type=checkbox]{accent-color:var(--acc);box-shadow:none}
 label{display:inline-flex;align-items:center;gap:6px}
 input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;background:#2a2c30;border:0;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);min-width:200px}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#d8d5cd;border:1px solid rgba(0,0,0,.3);box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:pointer}
@@ -35,9 +35,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .pos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}@media(max-width:560px){.pos{grid-template-columns:1fr 1fr}.pos div:last-child{grid-column:1/-1}}
 .pcard{background:#1a1b1f;border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:10px}
 .pill{font-size:12px;padding:2px 10px;border-radius:999px;font-weight:500;color:var(--mut);background:var(--card2);border:1px solid var(--line)}
-.pill.ok{color:var(--ok);background:rgba(143,181,166,.10);border-color:rgba(143,181,166,.22)}.pill.warn{color:var(--warn);background:rgba(212,176,106,.10);border-color:rgba(212,176,106,.22)}
+.pill.ok{color:var(--ok);background:rgba(201,178,138,.10);border-color:rgba(201,178,138,.24)}.pill.warn{color:var(--warn);background:rgba(212,176,106,.10);border-color:rgba(212,176,106,.22)}
 .bar{position:relative;height:6px;border-radius:999px;background:#25272b;margin:12px 0 4px;overflow:visible;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
-.bar i{position:absolute;inset:0;border-radius:999px;background:#4f7a6d}
+.bar i{position:absolute;inset:0;border-radius:999px;background:#8e7b58}
 .bar em{position:absolute;top:-5px;width:4px;height:16px;border-radius:2px;background:#e6e3dc;box-shadow:0 1px 3px rgba(0,0,0,.6);transform:translateX(-2px)}
 .barlbl{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
 #calc{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--txt);font-size:13px}#calc:empty{display:none}
@@ -72,7 +72,7 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 <div class="card"><div class="row"><h2 class="grow">成交量与份额</h2><span id="stSt" class="mut"></span></div>
 <div class="row" style="margin-bottom:8px"><button class="alt" data-sh="6">6h</button><button data-sh="12">12h</button><button class="alt" data-sh="24">24h</button><span class="grow"></span><button class="alt" id="stRef">刷新</button></div>
 <canvas id="stc" style="width:100%;height:220px;display:block;border-radius:12px;background:#121315;border:1px solid var(--line);box-shadow:inset 0 1px 3px rgba(0,0,0,.5)"></canvas>
-<div class="row mut" style="margin:6px 0 2px;gap:14px"><span><i class="lg" style="background:#34373c"></i>池子手续费</span><span><i class="lg" style="background:#6f9a8b"></i>你的收益</span><span><i class="lg" style="background:#b3a8cf;height:3px"></i>你的份额（右轴）</span></div>
+<div class="row mut" style="margin:6px 0 2px;gap:14px"><span><i class="lg" style="background:#3a3b40"></i>池子手续费</span><span><i class="lg" style="background:#c2a878"></i>你的收益</span><span><i class="lg" style="background:#9aa3b5;height:3px"></i>你的份额（右轴）</span></div>
 <div id="stV" class="vd"></div>
 <div id="stTbl" style="overflow-x:auto"></div>
 <div class="mut" style="margin-top:6px">单位 HYPE（KNTQ 按当时价格折算），当前池子，按每笔成交回放估算。你的收益 = 池子手续费 × 在区间时间 × 区间内份额：手续费掉了是成交量下来了，份额掉了是被别人加池稀释了，在区间时间掉了是价格跑出了区间。</div></div>
@@ -358,10 +358,12 @@ async function poolStats(LP,opt,onP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAb
  const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),ms))]);
  let head=null;for(let t=0;t<6&&head==null;t++){try{head=await TO(ps[t%ps.length].getBlockNumber(),8000)}catch(e){}}if(head==null)throw new Error('读不到区块高度');
  const now=Math.floor(Date.now()/1000),startTs=Math.floor((now-hours*3600)/3600)*3600; // align to clock hour
- let A=head-Math.round((now-startTs)*580/60);if(A<0)A=0;
+ let A=head-Math.round((now-startTs)*580/60*1.15);if(A<0)A=0;
  // calibrate block->time with two real blocks
  let hTs=now,aTs=startTs;try{const [hb,abk]=await Promise.all([TO(ps[0].getBlock(head),8000),TO(ps[1%ps.length].getBlock(A),8000)]);hTs=hb.timestamp;aTs=abk.timestamp}catch(e){}
- const bTs=b=>aTs+(b-A)*(hTs-aTs)/Math.max(1,head-A);
+ const lin=b=>aTs+(b-A)*(hTs-aTs)/Math.max(1,head-A);const kp=[];for(let b=A;b<head;b+=20000)kp.push(b);kp.push(head);
+ const kts=await Promise.all(kp.map((b,j)=>TO(ps[j%ps.length].getBlock(b),8000).then(x=>x.timestamp,()=>null)));const K=kp.map((b,j)=>[b,kts[j]]).filter(x=>x[1]!=null);
+ const bTs=b=>{if(K.length<2)return lin(b);let j=0;while(j<K.length-2&&K[j+1][0]<b)j++;const [b0,t0]=K[j],[b1,t1]=K[j+1];return t0+(b-b0)*(t1-t0)/Math.max(1,b1-b0)};
  const filters=[{address:C.PM,topics:[TSW,C.POOL_ID]},{address:C.PM,topics:[TM,C.POOL_ID,E.zeroPadValue(C.POSM,32)]}];
  if(me)filters.push({address:C.POSM,topics:[TT,null,E.zeroPadValue(me,32)]});
  const chunks=[];for(let f=0;f<filters.length;f++)for(let b=A;b<=head;b+=10000)chunks.push([f,b,Math.min(b+9999,head)]);
@@ -373,7 +375,7 @@ async function poolStats(LP,opt,onP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAb
  const mods=res[1].map(l=>{const d=ab.decode(['int24','int24','int256','bytes32'],l.data);return{l,tl:Number(d[0]),tu:Number(d[1]),dl:BigInt(d[2]),id:BigInt(d[3]).toString()}}).filter(m=>mine.has(m.id));
  // starting L per position = current L − deltas inside window
  const pos={};const sumD={};for(const m of mods){sumD[m.id]=(sumD[m.id]||0n)+m.dl;pos[m.id]=pos[m.id]||{tl:m.tl,tu:m.tu,L:0n}}
- const cur=await Promise.all([...mine].map(id=>LP.withRpc(p=>LP.readPosition(LP.mcRunner?LP.mcRunner(p):p,BigInt(id))).then(r=>({id,r}),()=>({id,r:null}))));
+ let cur;if(opt.cur){cur=[...mine].map(id=>({id,r:opt.cur[id]||null}))}else{const TOr=(pr,ms)=>Promise.race([pr,new Promise(r=>setTimeout(()=>r(null),ms))]);cur=await Promise.all([...mine].map(id=>TOr(LP.withRpc(p=>LP.readPosition(LP.mcRunner?LP.mcRunner(p):p,BigInt(id))),10000).then(r=>({id,r}),()=>({id,r:null}))))}
  for(const {id,r} of cur){if(!r||!r.isOurPool||r.otherPool)continue;pos[id]=pos[id]||{tl:r.tickLower,tu:r.tickUpper,L:0n};const s=r.liquidity-(sumD[id]||0n);pos[id].L=s>0n?s:0n}
  const ev=[...mods.map(m=>({k:'m',m,l:m.l})),...res[0].map(l=>({k:'s',l}))].sort((p,q)=>ord(p.l,q.l));
  const nB=Math.ceil((now-startTs)/3600);const B=[];for(let h=0;h<nB;h++)B.push({t:startTs+h*3600,vol:0,fee:0,my:0,inFee:0,n:0,myL:0n,actL:0n});
@@ -382,7 +384,7 @@ async function poolStats(LP,opt,onP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAb
   const d=ab.decode(['int128','int128','uint160','uint128','int24','uint24'],e.l.data);const a0=d[0],a1=d[1],L=d[3],tk=Number(d[4]),fr=Number(d[5]);const t0=prev??tk;prev=tk;
   const px=1/Math.pow(1.0001,tk);const vin=a0<0n?Number(-a0)/1e18:Number(-a1)/1e18*px;const fee=vin*fr/1e6;
   let my=0n;for(const p of Object.values(pos))if(p.L>0n&&t0>=p.tl&&t0<p.tu&&tk>=p.tl&&tk<p.tu)my+=p.L;
-  const h=Math.min(nB-1,Math.max(0,Math.floor((bTs(e.l.blockNumber)-startTs)/3600)));const b=B[h];
+  const ts=bTs(e.l.blockNumber);if(ts<startTs)continue;const h=Math.min(nB-1,Math.floor((ts-startTs)/3600));const b=B[h];
   b.vol+=vin;b.fee+=fee;b.n++;if(my>0n&&L>0n){b.inFee+=fee;b.my+=fee*Number(my)/Number(L)}b.myL=my;b.actL=L}
  for(const b of B){b.share=b.fee>0?b.my/b.fee:0;b.inR=b.fee>0?b.inFee/b.fee:0;b.inShare=b.inFee>0?b.my/b.inFee:0}
  return{startTs,now,buckets:B,ids:[...mine]}}
@@ -476,7 +478,7 @@ async function _refreshPositions(){
     const val=valH*hu,fee=feeH*hu; // 美元；取不到美元价时 hu=0，界面改显示 HYPE
     const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
     out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
-  const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};
+  const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};S._posLoaded=1;
   $('positions').innerHTML=out.filter(p=>!($('hideEmpty').checked&&p.liquidity===0n&&p.fee<0.001)).map(p=>{S.pos[p.id]=p;
     const mine=S.acct&&p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase();const pl=t=>(1/Math.pow(1.0001,t)).toPrecision(4);
     const lo=1/Math.pow(1.0001,p.tickUpper),hi=1/Math.pow(1.0001,p.tickLower),cur=S.pool.hypePerKntq,pc=Math.max(0,Math.min(100,(cur-lo)/(hi-lo)*100));
@@ -582,9 +584,9 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
   // liquidity histogram (right side)
   if(CH.liq){const segs=CH.liq.segs.filter(s=>s[1]>v.top&&s[0]<v.bot&&s[2]>0n);const mx=segs.reduce((a,s)=>s[2]>a?s[2]:a,1n);
     for(const s of segs){const y1=tY(s[0],v,h),y2=tY(s[1],v,h),len=Number(s[2]*1000n/mx)/1000*(w-LW-6);
-      const inr=S.pool&&s[0]<=S.pool.tick&&S.pool.tick<s[1];cx.fillStyle=inr?'rgba(143,181,166,.7)':'rgba(165,155,191,.35)';cx.fillRect(w-len,Math.min(y1,y2),len,Math.max(1,Math.abs(y2-y1)-1))}}
+      const inr=S.pool&&s[0]<=S.pool.tick&&S.pool.tick<s[1];cx.fillStyle=inr?'rgba(201,178,138,.6)':'rgba(165,155,191,.35)';cx.fillRect(w-len,Math.min(y1,y2),len,Math.max(1,Math.abs(y2-y1)-1))}}
   // range band
-  const r=chRangeTicks();if(r){const ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);cx.fillStyle='rgba(143,181,166,.09)';cx.fillRect(0,ya,w,yb-ya)}
+  const r=chRangeTicks();if(r){const ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);cx.fillStyle='rgba(201,178,138,.08)';cx.fillRect(0,ya,w,yb-ya)}
   // my positions
   Object.values(S.pos||{}).filter(p=>p.liquidity>0n).forEach(p=>{cx.setLineDash([2,4]);cx.strokeStyle='rgba(212,176,106,.6)';[p.tickLower,p.tickUpper].forEach(t=>{const y=tY(t,v,h);cx.beginPath();cx.moveTo(0,y);cx.lineTo(LW,y);cx.stroke()});cx.setLineDash([])});
   // price line
@@ -598,10 +600,10 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
     lbl('现价 '+S.pool.hypePerKntq.toPrecision(4),LW-4,y,'#d8d5cd','#121315','right')}
   // handles
   if(r){[['hi',r.tHiP,'上 '],['lo',r.tLoP,'下 ']].forEach(([k,t,nm])=>{const y=tY(t,v,h),act=CH.drag&&(CH.drag.k===k||CH.drag.k==='band');
-    cx.strokeStyle=act?'#e6e3dc':'#8fb5a6';cx.lineWidth=act?3:2;cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.lineWidth=1;
-    const p=t2p(t);lbl(nm+p.toPrecision(4)+'  '+pct(p),6,y,'#8fb5a6','#14211d','left');
+    cx.strokeStyle=act?'#e6e3dc':'#c9b28a';cx.lineWidth=act?3:2;cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.lineWidth=1;
+    const p=t2p(t);lbl(nm+p.toPrecision(4)+'  '+pct(p),6,y,'#c9b28a','#2a2418','left');
     // grip
-    cx.fillStyle='#e6e3dc';cx.beginPath();cx.roundRect?cx.roundRect(LW/2-22,y-7,44,14,7):cx.rect(LW/2-22,y-7,44,14);cx.fill();cx.fillStyle='#8fb5a6';for(let i=-1;i<=1;i++)cx.fillRect(LW/2-9,y-3+i*3+1,18,1.4)})}
+    cx.fillStyle='#e6e3dc';cx.beginPath();cx.roundRect?cx.roundRect(LW/2-22,y-7,44,14,7):cx.rect(LW/2-22,y-7,44,14);cx.fill();cx.fillStyle='#c9b28a';for(let i=-1;i<=1;i++)cx.fillRect(LW/2-9,y-3+i*3+1,18,1.4)})}
 }
 function lbl(t,x,y,bg,fg,al){cx.font='600 11.5px -apple-system,system-ui,sans-serif';const tw=cx.measureText(t).width+12,x0=al==='right'?x-tw:x;cx.fillStyle=bg;cx.beginPath();cx.roundRect?cx.roundRect(x0,y-19,tw,17,6):cx.rect(x0,y-19,tw,17);cx.fill();cx.fillStyle=fg;cx.textAlign='left';cx.textBaseline='middle';cx.fillText(t,x0+6,y-10.5)}
 function chSet(tHi,tLo){const TS=C.TS,c=chCur();tHi=Math.max(tHi,c-SANE);tLo=Math.min(tLo,c+SANE);tHi=Math.round(tHi/TS)*TS;tLo=Math.round(tLo/TS)*TS;if(tLo-tHi<TS)return false;const [a,b]=chIn();a.value=t2p(tLo).toPrecision(5);b.value=t2p(tHi).toPrecision(5);return true}
@@ -636,10 +638,10 @@ function stDraw(){const cv=$('stc');if(!cv)return;const dpr=window.devicePixelRa
  cx.strokeStyle='rgba(255,255,255,.05)';cx.fillStyle='rgba(139,138,133,.85)';
  for(let i=0;i<=4;i++){const y=top+H*i/4;cx.beginPath();cx.moveTo(padL,y);cx.lineTo(w-padR,y);cx.stroke();cx.textAlign='right';cx.fillText((mx*(1-i/4)).toFixed(mx<2?2:1),padL-4,y+4);cx.textAlign='left';cx.fillText(Math.round(100*(1-i/4))+'%',w-padR+4,y+4)}
  const bw=W/n;B.forEach((b,i)=>{const x=padL+i*bw+bw*.15,bwi=bw*.7;const y1=top+H*(1-b.fee/mx),y2=top+H*(1-b.my/mx);
-  cx.fillStyle='#34373c';cx.fillRect(x,y1,bwi,top+H-y1);cx.fillStyle='#6f9a8b';cx.fillRect(x+bwi*.2,y2,bwi*.6,top+H-y2);
+  cx.fillStyle='#3a3b40';cx.fillRect(x,y1,bwi,top+H-y1);cx.fillStyle='#c2a878';cx.fillRect(x+bwi*.2,y2,bwi*.6,top+H-y2);
   if(n<=12||i%2===0){cx.fillStyle='rgba(139,138,133,.85)';cx.textAlign='center';cx.fillText(new Date(b.t*1000).getHours()+'时',x+bwi/2,h-6)}});
- cx.strokeStyle='#b3a8cf';cx.lineWidth=1.6;cx.beginPath();let st=false;B.forEach((b,i)=>{if(!b.fee)return;const x=padL+i*bw+bw/2,y=top+H*(1-b.share);st?cx.lineTo(x,y):cx.moveTo(x,y);st=true});cx.stroke();
- cx.fillStyle='#b3a8cf';B.forEach((b,i)=>{if(!b.fee)return;cx.beginPath();cx.arc(padL+i*bw+bw/2,top+H*(1-b.share),2.5,0,7);cx.fill()});cx.lineWidth=1}
+ cx.strokeStyle='#9aa3b5';cx.lineWidth=1.6;cx.beginPath();let st=false;B.forEach((b,i)=>{if(!b.fee)return;const x=padL+i*bw+bw/2,y=top+H*(1-b.share);st?cx.lineTo(x,y):cx.moveTo(x,y);st=true});cx.stroke();
+ cx.fillStyle='#9aa3b5';B.forEach((b,i)=>{if(!b.fee)return;cx.beginPath();cx.arc(padL+i*bw+bw/2,top+H*(1-b.share),2.5,0,7);cx.fill()});cx.lineWidth=1}
 function stVerdict(B){const full=B.slice(0,-1).filter(b=>b.fee>0);if(full.length<3)return'数据不够，至少要 4 小时。';
  const last=full[full.length-1],prev=full.slice(-4,-1),avg=k=>prev.reduce((s,b)=>s+b[k],0)/prev.length;
  const a={fee:avg('fee'),inR:avg('inR'),inShare:prev.reduce((s,b)=>s+b.inShare,0)/prev.length,my:avg('my')};
@@ -656,7 +658,8 @@ function stRender(){stDraw();const d=ST.data;if(!d){$('stTbl').innerHTML='';$('s
   return `<tr><td>${lab}</td><td>${b.vol.toFixed(0)}</td><td>${b.fee.toFixed(2)}</td><td>${b.fee?Math.round(b.inR*100)+'%':'-'}</td><td>${b.inFee?Math.round(b.inShare*100)+'%':'-'}</td><td><b>${b.my.toFixed(2)}</b></td></tr>`}).join('');
  $('stTbl').innerHTML=`<table class="st"><tr><th>时段</th><th>成交量</th><th>池子手续费</th><th>在区间</th><th>区间内份额</th><th>你的收益</th></tr>${r}</table>`}
 async function stLoad(){if(ST.busy)return;ST.busy=true;ST.data=null;stRender();$('stSt').textContent='读取 0%';
- try{ST.data=await poolStats(LP,{hours:ST.hours,me:S.acct,ids:store.get('lp_ids',[])},(a,b)=>$('stSt').textContent=`读取 ${Math.round(a/b*100)}%`);$('stSt').textContent='更新于 '+new Date().toLocaleTimeString().slice(0,5)}
+ try{for(let k=0;k<40&&!S._posLoaded;k++)await new Promise(r=>setTimeout(r,500));const cur={};for(const [id,p] of Object.entries(S.pos||{}))if(p&&p.isOurPool&&!p.otherPool)cur[String(id)]=p;
+ ST.data=await poolStats(LP,{hours:ST.hours,me:S.acct,ids:store.get('lp_ids',[]),cur:S._posLoaded?cur:null},(a,b)=>$('stSt').textContent=`读取 ${Math.round(a/b*100)}%`);$('stSt').textContent='更新于 '+new Date().toLocaleTimeString().slice(0,5)}
  catch(e){$('stSt').textContent='读取失败：'+e.message}ST.busy=false;stRender()}
 document.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{ST.hours=+b.dataset.sh;document.querySelectorAll('[data-sh]').forEach(x=>x.className=x===b?'':'alt');stLoad()});
 $('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(stLoad,6000);
