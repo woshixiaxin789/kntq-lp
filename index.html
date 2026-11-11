@@ -342,6 +342,7 @@ const {E,C}=LP;const $=id=>document.getElementById(id);
 const S={acct:null,signer:null,rpcIdx:0,pool:null,bal:null,hypeUsd:null,hypeUsdAt:0,plan:null,pos:{}};
 const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 const f=(x,d=4)=>Number(E.formatEther(x)).toLocaleString(undefined,{maximumFractionDigits:d});
+const hv=h=>h==null||isNaN(h)?'-':S.hypeUsd?usd(h*S.hypeUsd)+' <span class="mut" style="font-size:12px">≈'+h.toFixed(h<1?4:2)+' HYPE</span>':'≈'+h.toFixed(h<1?4:2)+' HYPE';
 const usd=x=>x==null||isNaN(x)?'-':'$'+x.toLocaleString(undefined,{maximumFractionDigits:2});
 function log(m,cls=''){const t=new Date().toLocaleTimeString();const l=store.get('lp_log',[]);l.unshift(`${t} ${m}`);store.set('lp_log',l.slice(0,300));$('log').innerHTML=l.map(x=>`<div class="${cls}">${x}</div>`).join('');}
 log('页面加载，当前池子 '+C.POOL_NAME);$('hFee').textContent=C.POOL_NAME;$('poolSel').value=C.POOL_K;$('poolSel').onchange=e=>{store.set('lp_pool',e.target.value);location.href=location.pathname+'?pool='+e.target.value};
@@ -350,7 +351,11 @@ const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error
 let PS=null;const prov=()=>PS||(PS=C.rpcs.map((_,i)=>LP.provider(i)));const P0=prov()[0];
 async function rpcSeq(fn,ms=20000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<2;t++){try{const r=await TO(fn(t===0?prov()[i]:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',i,t,e);await new Promise(r=>setTimeout(r,1000))}}}throw last}
 async function rpc(fn,ms=8000){let last;for(let t=0;t<3;t++){const ps=t===0?prov():C.rpcs.map((_,i)=>LP.provider(i));try{const r=await Promise.any(ps.map((p,i)=>TO(fn(p),ms).then(v=>{$('rpcSt').textContent='RPC '+(i+1);return v})));return r}catch(e){last=(e.errors&&e.errors[0])||e;console.warn('rpc race',t,e);$('rpcSt').textContent='RPC 重试 '+(t+1);await new Promise(r=>setTimeout(r,1000))}}throw last}
-async function hypePrice(){try{const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),6000);const r=await fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}',signal:ac.signal});clearTimeout(tm);const j=await r.json();const v=parseFloat(j.HYPE);if(v>0){S.hypeUsd=v;S.hypeUsdAt=Date.now()}}catch(e){}}
+async function hypePrice(){const tm=ms=>{const ac=new AbortController();setTimeout(()=>ac.abort(),ms);return ac.signal};
+  const src=[()=>fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}',signal:tm(6000)}).then(r=>r.json()).then(j=>parseFloat(j.HYPE)),
+    ()=>fetch('https://www.okx.com/api/v5/market/ticker?instId=HYPE-USDT',{signal:tm(6000)}).then(r=>r.json()).then(j=>parseFloat(j.data[0].last)),
+    ()=>fetch('https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid&vs_currencies=usd',{signal:tm(6000)}).then(r=>r.json()).then(j=>parseFloat(j.hyperliquid.usd))];
+  try{const v=await Promise.any(src.map(f=>f().then(v=>{if(!(v>0))throw 0;return v})));S.hypeUsd=v;S.hypeUsdAt=Date.now();if(S.pool&&Object.keys(S.pos).length&&!S._repainted){S._repainted=1;refreshPositions().catch(()=>{})}}catch(e){}}
 function stale(){const age=(Date.now()-S.hypeUsdAt)/1000;$('stale').textContent=!S.hypeUsdAt?'(取价失败)':age>90?`(已过期 ${Math.round(age)}s)`:'';$('stale').className=age>90||!S.hypeUsdAt?'warn':'mut'}
 async function refreshTop(){
   S.pool=await rpc(p=>LP.readPool(p));const pl=S.pool;
@@ -410,25 +415,25 @@ async function mint(){
   if(rc){const t=E.id('Transfer(address,address,uint256)');rc.logs.filter(l=>l.address.toLowerCase()===C.POSM&&l.topics[0]===t).forEach(l=>addId(BigInt(l.topics[3]).toString()));await refreshTop();await refreshPositions()}
 }
 function addId(id){const ids=store.get('lp_ids',[]);if(!ids.includes(id)){ids.push(id);store.set('lp_ids',ids);log('添加仓位 #'+id)}}
-function samples(id,feeUsd){const k='lp_s_'+id;let s=store.get(k,[]);const now=Date.now();s.push([now,feeUsd]);s=s.filter(x=>now-x[0]<3600e3);store.set(k,s);return s}
+function samples(id,feeUsd){const k='lp_h_'+id;let s=store.get(k,[]);const now=Date.now();s.push([now,feeUsd]);s=s.filter(x=>now-x[0]<3600e3);store.set(k,s);return s}
 let _rp=null;async function refreshPositions(){if(_rp)return _rp;_rp=(async()=>{try{await TO(_refreshPositions(),45000)}catch(e){log('仓位刷新出错：'+(e.shortMessage||e.message),'bad');$('positions').innerHTML='<p class="bad">读取失败（节点限流），稍等点「刷新」重试。别开多个本页标签。</p>'}finally{_rp=null}})();return _rp}
 async function _refreshPositions(){
   if(!S.pool)await refreshTop();if(!S.pool)throw new Error('读不到池子');if(!Object.keys(S.pos).length)$('positions').innerHTML='<p class="mut">读取中…</p>';const ids=store.get('lp_ids',[]);const hu=S.hypeUsd||0,kp=S.pool.hypePerKntq;const out=[];
   const rs=await rpc(async pr=>{const mc=LP.mcRunner(pr);const r=await Promise.all(ids.map(id=>LP.readPosition(mc,BigInt(id),S.pool).then(p=>({p}),e=>({e}))));if(r.length&&r.every(x=>x.e))throw r[0].e;return r});
   for(let i=0;i<ids.length;i++){const id=ids[i];try{if(rs[i].e)throw rs[i].e;const p=rs[i].p;if(!p.isOurPool)continue;
-    const val=(Number(E.formatEther(p.amount0))+Number(E.formatEther(p.amount1))*kp)*hu;
-    const fee=(Number(E.formatEther(p.fee0))+Number(E.formatEther(p.fee1))*kp)*hu;
-    const s=samples(id,fee);let apr=null,ps=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&fee>=o[1]){ps=(fee-o[1])/((Date.now()-o[0])/1000);apr=val>0?ps*31536000/val*100:null}
-    out.push({...p,id,val,fee,apr,ps})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
+    const valH=Number(E.formatEther(p.amount0))+Number(E.formatEther(p.amount1))*kp,feeH=Number(E.formatEther(p.fee0))+Number(E.formatEther(p.fee1))*kp;
+    const val=valH*hu,fee=feeH*hu; // 美元；取不到美元价时 hu=0，界面改显示 HYPE
+    const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
+    out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
   const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};
   $('positions').innerHTML=out.filter(p=>!($('hideEmpty').checked&&p.liquidity===0n&&p.fee<0.001)).map(p=>{S.pos[p.id]=p;
     const mine=S.acct&&p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase();const pl=t=>(1/Math.pow(1.0001,t)).toPrecision(4);
     const lo=1/Math.pow(1.0001,p.tickUpper),hi=1/Math.pow(1.0001,p.tickLower),cur=S.pool.hypePerKntq,pc=Math.max(0,Math.min(100,(cur-lo)/(hi-lo)*100));
     return `<div class="pcard"><div class="row"><b style="font-size:16px">#${p.id}</b><span class="pill">${p.poolName||""} 池</span><span class="pill ${p.inRange?'ok':'warn'}">${p.liquidity===0n?'已撤空':p.inRange?'区间内':'区间外，不赚手续费'}</span><span class="grow"></span>${mine?'':'<span class="warn">非当前钱包</span>'}</div>
     ${p.liquidity===0n?'':`<div class="bar"><i></i><em style="left:${pc}%"></em></div><div class="barlbl"><span>${pl(p.tickUpper)}</span><span>现价 ${cur.toPrecision(4)}</span><span>${pl(p.tickLower)}</span></div>`}
-    <div class="pos"><div><b>本金（现值）</b>${usd(p.val)}<br><span class="mut">${f(p.amount0)} HYPE + ${f(p.amount1,1)} KNTQ</span></div>
-    <div><b>待领收益</b>${usd(p.fee)}<br><span class="mut">${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ</span></div>
-    <div><b>近期年化 / 每秒</b>${p.apr==null?'<span class="mut">采样中…</span>':p.apr.toFixed(1)+'%'}<br><span class="mut">${p.ps==null?'':usd(p.ps).replace('$','$')+'/秒 · '+usd(p.ps*86400)+'/天'}</span></div></div>
+    <div class="pos"><div><b>本金（现值）</b>${hv(p.valH)}<br><span class="mut">${f(p.amount0)} HYPE + ${f(p.amount1,1)} KNTQ</span></div>
+    <div><b>待领收益</b>${hv(p.feeH)}<br><span class="mut">${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ</span></div>
+    <div><b>近期年化 / 每秒</b>${p.apr==null?'<span class="mut">采样中…</span>':p.apr.toFixed(1)+'%'}<br><span class="mut">${p.psH==null?'':hv(p.psH*86400)+'/天'}</span></div></div>
     ${mine?`<div class="row"><button class="alt" onclick="collect('${p.id}')">领取手续费</button><button class="red" onclick="removeAll('${p.id}')">全部撤池</button></div>`:''}</div>`}).join('')||(ids.length?(out.length?'<p class="mut">仓位都已撤空（取消勾选「隐藏已撤空」可看）。</p>':'<p class="bad">仓位没读到，点「刷新」重试。</p>'):'<p class="mut">本机没存仓位编号：在编号框填 613,617 点「添加」，或点「扫描链上仓位」。</p>');
 }
 async function collect(id){const p=S.pos[id];await sendTx('领取手续费 #'+id,LP.buildCollect({tokenId:BigInt(id),owner:S.acct}),`领取约 ${f(p.fee0,5)} HYPE + ${f(p.fee1,3)} KNTQ 到 ${S.acct}`)&&(await refreshTop(),await refreshPositions())}
