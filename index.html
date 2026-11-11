@@ -462,19 +462,25 @@ async function migrate(){const slip=BigInt(Math.round(+$('iSlip').value*100));le
   if(live.length){const list=live.map(p=>({tokenId:BigInt(p.id),L:p.liquidity,min0:p.amount0*(10000n-slip)/10000n,min1:p.amount1*(10000n-slip)/10000n}));
     const rc=await sendTx('移仓 1/3：撤出全部仓位',LP.buildRemoveMany(list,S.acct),`撤出 ${live.map(p=>'#'+p.id).join(' ')} 全部流动性+手续费到钱包\n最少到账 ${f(list.reduce((a,x)=>a+x.min0,0n))} HYPE + ${f(list.reduce((a,x)=>a+x.min1,0n),1)} KNTQ`);if(!rc)return;
     await new Promise(r=>setTimeout(r,2000))}
-  await refreshTop();const gas=E.parseEther(String(+$('mGas').value||0));const Hw=S.bal.hype>gas?S.bal.hype-gas:0n;
-  const sp=LP.swapPlan2(S.pool.sqrtP,S.pool.liquidity,r.tl,r.tu,Hw,S.bal.kntq,S.pool.lpFee||C.FEE);
-  if(sp.dH&&sp.dH>E.parseEther('0.05')){const minOut=sp.outK*(10000n-slip)/10000n;
-    if(!await sendTx('移仓 2/3：卖 HYPE 换 KNTQ',LP.buildSwapH2K({amountIn:sp.dH,minOut}),`卖出 ${f(sp.dH)} HYPE\n预计得 ${f(sp.outK,1)} KNTQ，最少 ${f(minOut,1)} KNTQ（滑点 ${$('iSlip').value}%）`))return;
-    await new Promise(r=>setTimeout(r,2000));await refreshTop()}
-  else if(sp.dK>E.parseEther('1')){const a=await rpc(p=>LP.p2AllowUR(p,S.acct));
-    if(S.bal.erc20ToPermit2<sp.dK){if(!await sendTx('授权 KNTQ 给 Permit2',LP.buildApproveP2(),'KNTQ.approve(Permit2, 无限)'))return}
-    if(a.amt<sp.dK||a.exp<Date.now()/1000+600){if(!await sendTx('移仓 2/3：授权 Uniswap 路由',LP.buildP2ApproveUR(),'Permit2.approve(KNTQ → Uniswap Universal Router '+C.UR+'，30 天)\n这是 Uniswap 官方在 Elysium 部署的路由'))return}
-    const minOut=sp.out*(10000n-slip)/10000n;
-    if(!await sendTx('移仓 2/3：卖 KNTQ 换 HYPE',LP.buildSwapK2H({amountIn:sp.dK,minOut}),`卖出 ${f(sp.dK,2)} KNTQ\n预计得 ${f(sp.out)} HYPE，最少 ${f(minOut)} HYPE（滑点 ${$('iSlip').value}%）`))return;
-    await new Promise(r=>setTimeout(r,2000));await refreshTop()}
-  const H=S.bal.hype>gas?S.bal.hype-gas:0n,K=S.bal.kntq,sa=LP.sqrtAt(r.tl),sb=LP.sqrtAt(r.tu);
-  const L=LP.liquidityFor(S.pool.sqrtP,sa,sb,H*(10000n-slip)/10000n,K*(10000n-slip)/10000n);const a=LP.amountsForLiquidity(S.pool.sqrtP,sa,sb,L);
+  const gas=E.parseEther(String(+$('mGas').value||0));const BUF=50n; // 建仓只留 0.5% 余量
+  // 换币：第一次按价格冲击估算；之后重读真实价格和余额，偏差超过 1% 就再小额纠偏一次（最多 2 次），保证一次建到位
+  for(let round=0;round<3;round++){
+    await refreshTop();const Hw=S.bal.hype>gas?S.bal.hype-gas:0n;
+    const sp=LP.swapPlan2(S.pool.sqrtP,S.pool.liquidity,r.tl,r.tu,Hw,S.bal.kntq,S.pool.lpFee||C.FEE);
+    const P=S.pool.hypePerKntq,tot=Number(Hw)+Number(S.bal.kntq)*P,mis=sp.dH?Number(sp.dH):sp.dK?Number(sp.dK)*P:0;
+    if(round>0&&mis<tot*0.01)break; if(mis<1e15)break;
+    const tag=round===0?'移仓 2/3':'移仓 纠偏 '+round;
+    if(sp.dH>0n){const minOut=sp.outK*(10000n-slip)/10000n;
+      if(!await sendTx(tag+'：卖 HYPE 换 KNTQ',LP.buildSwapH2K({amountIn:sp.dH,minOut}),`卖出 ${f(sp.dH)} HYPE\n预计得 ${f(sp.outK,1)} KNTQ，最少 ${f(minOut,1)} KNTQ（滑点 ${$('iSlip').value}%）`+(round?'\n上一笔成交后价格有变化，补一小笔让两种币比例对上新区间':'')))return}
+    else if(sp.dK>0n){const a=await rpc(p=>LP.p2AllowUR(p,S.acct));
+      if(S.bal.erc20ToPermit2<sp.dK){if(!await sendTx('授权 KNTQ 给 Permit2',LP.buildApproveP2(),'KNTQ.approve(Permit2, 无限)'))return}
+      if(a.amt<sp.dK||a.exp<Date.now()/1000+600){if(!await sendTx(tag+'：授权 Uniswap 路由',LP.buildP2ApproveUR(),'Permit2.approve(KNTQ → Uniswap Universal Router '+C.UR+'，30 天)\n这是 Uniswap 官方在 Elysium 部署的路由'))return}
+      const minOut=sp.out*(10000n-slip)/10000n;
+      if(!await sendTx(tag+'：卖 KNTQ 换 HYPE',LP.buildSwapK2H({amountIn:sp.dK,minOut}),`卖出 ${f(sp.dK,2)} KNTQ\n预计得 ${f(sp.out)} HYPE，最少 ${f(minOut)} HYPE（滑点 ${$('iSlip').value}%）`+(round?'\n上一笔成交后价格有变化，补一小笔让两种币比例对上新区间':'')))return}
+    else break;
+    await new Promise(r=>setTimeout(r,2500))}
+  await refreshTop();const H=S.bal.hype>gas?S.bal.hype-gas:0n,K=S.bal.kntq,sa=LP.sqrtAt(r.tl),sb=LP.sqrtAt(r.tu);
+  const L=LP.liquidityFor(S.pool.sqrtP,sa,sb,H*(10000n-BUF)/10000n,K*(10000n-BUF)/10000n);const a=LP.amountsForLiquidity(S.pool.sqrtP,sa,sb,L);
   const max0=a.a0*(10000n+slip)/10000n,max1=a.a1*(10000n+slip)/10000n;
   S.plan={tl:r.tl,tu:r.tu,L,a0:a.a0,a1:a.a1,max0:max0>H?H:max0,max1:max1>K?K:max1};log(`移仓 3/3：建仓 L=${L} 区间 ${r.tl}~${r.tu}`);await mint();await mEstimate().catch(()=>{})}
 $('mCalc').onclick=()=>mEstimate().catch(e=>alert(e.shortMessage||e.message));
