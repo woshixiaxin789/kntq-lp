@@ -84,7 +84,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:13px;margin:0;font-famil
 <div class="row mut" style="margin:4px 0 8px">上下拖青色线改上/下限，拖中间整体平移。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
 </div>
 
-<div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（两个池子都撤，含手续费）→ 在上面选的「当前池子」建仓。→ 按新区间把多出的 KNTQ 换成 HYPE（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
+<div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（两个池子都撤，含手续费）→ 在上面选的「当前池子」建仓。→ 按新区间把多出的币（KNTQ 或 HYPE）换成另一种，计入换币本身的价格冲击（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
 <div class="row" style="margin-top:6px">新区间 KNTQ 价格 下 <input id="mLo" type="number" step="any" value="0.005197" style="width:95px"> 上 <input id="mHi" type="number" step="any" value="0.006606" style="width:95px"> HYPE</div>
 <div class="row" style="margin-top:6px">留 gas <input id="mGas" type="number" step="any" value="0.3" style="width:60px"> HYPE <button class="alt" id="mCalc">预估</button><button id="mGo">开始移仓</button></div>
 <div id="mInfo" class="mut" style="margin-top:6px"></div></div>
@@ -269,6 +269,30 @@ function swapPlan(sp, tl, tu, H, K, feePpm = 10000) { // how much KNTQ to sell s
   if (dK <= 0) return { dK: 0n, p, needH2K: dK < 0 };
   return { dK: BigInt(Math.floor(dK)), p, out: BigInt(Math.floor(dK * p * fk)) };
 }
+function swapPlan2(sp, Lact, tl, tu, H, K, feePpm = 10000) { // price-impact aware: simulate swap through active L, bisect so post-swap H:K fits range at post-swap price
+  const Q = 2 ** 96, s0 = Number(sp) / Q, L = Number(Lact), f = 1 - feePpm / 1e6, sa = Number(sqrtAt(tl)) / Q, sb = Number(sqrtAt(tu)) / Q;
+  const h = Number(H), k = Number(K); if (!(L > 0)) return swapPlan(sp, tl, tu, H, K, feePpm);
+  const need = (s) => { const c = Math.min(Math.max(s, sa), sb); return { a0: (sb - c) / (c * sb), a1: c - sa }; }; // amounts per unit L
+  const k2h = (x) => { const s = s0 + x * f / L; return { s, h: h + L * (1 / s0 - 1 / s), k: k - x }; };
+  const h2k = (y) => { const s = 1 / (1 / s0 + y * f / L); return { s, h: h - y, k: k + L * (s0 - s) }; };
+  const g = (st) => { const n = need(st.s); return st.h * n.a1 - st.k * n.a0; }; // >0 too much HYPE, <0 too much KNTQ
+  const g0 = g({ s: s0, h, k });
+  if (Math.abs(g0) < 1e-9 * (h + k + 1)) return { dK: 0n, dH: 0n, p: 1 / s0 ** 2 };
+  if (g0 < 0) { let lo = 0, hi = k; for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (g(k2h(m)) < 0) lo = m; else hi = m; }
+    const st = k2h(lo); return { dK: BigInt(Math.floor(lo)), out: BigInt(Math.floor(st.h - h)), p: 1 / s0 ** 2, pAfter: 1 / st.s ** 2, dir: 'K2H' }; }
+  let lo = 0, hi = h; for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (g(h2k(m)) > 0) lo = m; else hi = m; }
+  const st = h2k(lo); return { dK: 0n, dH: BigInt(Math.floor(lo)), outK: BigInt(Math.floor(st.k - k)), p: 1 / s0 ** 2, pAfter: 1 / st.s ** 2, dir: 'H2K', needH2K: true };
+}
+function buildSwapH2K({ amountIn, minOut }) { // Universal Router: V4_SWAP SWAP_EXACT_IN HYPE(native) -> KNTQ
+  const params = [
+    ab.encode(['tuple(address,tuple(address,uint24,int24,address,bytes)[],uint256[],uint128,uint128)'], [[C.NATIVE, [[C.KNTQ, C.FEE, C.TS, C.HOOKS, '0x']], [], amountIn, minOut]]),
+    ab.encode(['address', 'uint256'], [C.NATIVE, amountIn]),
+    ab.encode(['address', 'uint256'], [C.KNTQ, minOut]),
+  ];
+  const input = enc([0x07, 0x0c, 0x0f], params);
+  const ur = new E.Interface(['function execute(bytes commands,bytes[] inputs,uint256 deadline) payable']);
+  return { to: C.UR, data: ur.encodeFunctionData('execute', ['0x10', [input], deadline()]), value: amountIn };
+}
 async function balances(p, addr) {
   const k = new E.Contract(C.KNTQ, ERC20, p), p2 = new E.Contract(C.PERMIT2, P2, p);
   const [h, kb, a1, a2] = await Promise.all([p.getBalance(addr), k.balanceOf(addr), k.allowance(addr, C.PERMIT2), p2.allowance(addr, C.KNTQ, C.POSM)]);
@@ -286,7 +310,7 @@ async function scanPositions(p, addr, blocks = 200000, step = 9999, onProgress) 
   }
   return [...ids];
 }
-const api = { POOLS, setPool, buildRemoveMany, buildP2ApproveUR, p2AllowUR, buildSwapK2H, swapPlan, mcRunner, C, KEY, A, E, provider, withRpc, readPool, readPosition, sqrtAt, amountsForLiquidity, liquidityFor, rangeTicks, buildMint, buildIncrease, buildCollect, buildRemove, balances, buildApproveP2, buildP2Approve, scanPositions, POSM_ABI };
+const api = { POOLS, setPool, buildRemoveMany, buildP2ApproveUR, p2AllowUR, buildSwapK2H, buildSwapH2K, swapPlan, swapPlan2, mcRunner, C, KEY, A, E, provider, withRpc, readPool, readPosition, sqrtAt, amountsForLiquidity, liquidityFor, rangeTicks, buildMint, buildIncrease, buildCollect, buildRemove, balances, buildApproveP2, buildP2Approve, scanPositions, POSM_ABI };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LP = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -427,20 +451,23 @@ function mRange(){const lg=Math.log(1.0001),TS=C.TS,lo=+$('mLo').value,hi=+$('mH
 function myLive(){return Object.values(S.pos).filter(p=>p.liquidity>0n&&p.owner&&S.acct&&p.owner.toLowerCase()===S.acct.toLowerCase())}
 async function mEstimate(){if(!S.acct)throw new Error('先连接钱包');await refreshTop();await refreshPositions();const r=mRange(),live=myLive();
   let H=0n,K=0n;live.forEach(p=>{H+=p.amount0+p.fee0;K+=p.amount1+p.fee1});const gas=E.parseEther(String(+$('mGas').value||0));
-  const Hw=S.bal.hype>gas?S.bal.hype-gas:0n;H+=Hw;K+=S.bal.kntq;const sp=LP.swapPlan(S.pool.sqrtP,r.tl,r.tu,H,K,S.pool.lpFee||C.FEE);
-  const H2=H+(sp.out||0n),K2=K-sp.dK;const L=LP.liquidityFor(S.pool.sqrtP,LP.sqrtAt(r.tl),LP.sqrtAt(r.tu),H2,K2);
+  const Hw=S.bal.hype>gas?S.bal.hype-gas:0n;H+=Hw;K+=S.bal.kntq;const Lact=S.pool.liquidity-live.filter(p=>!p.otherPool&&p.inRange).reduce((a,p)=>a+p.liquidity,0n);const sp=LP.swapPlan2(S.pool.sqrtP,Lact,r.tl,r.tu,H,K,S.pool.lpFee||C.FEE);
+  const H2=H+(sp.out||0n)-(sp.dH||0n),K2=K-sp.dK+(sp.outK||0n);const L=LP.liquidityFor(S.pool.sqrtP,LP.sqrtAt(r.tl),LP.sqrtAt(r.tu),H2,K2);
   const share=Number(L)/Number(S.pool.liquidity-live.reduce((a,p)=>a+p.liquidity,0n)+L)*100;
   const inr=S.pool.tick>=r.tl&&S.pool.tick<r.tu;
-  $('mInfo').innerHTML=`目标池子 <b>${C.POOL_NAME}</b>，新区间 <b>${r.lo.toPrecision(5)} ~ ${r.hi.toPrecision(5)}</b> HYPE/KNTQ（tick ${r.tl}~${r.tu}，现价 ${S.pool.hypePerKntq.toPrecision(5)}${inr?'':' <span class="bad">不在新区间内</span>'}）<br>撤出 ${live.length} 个仓位：${live.map(p=>'#'+p.id).join(' ')}；合计可用约 ${f(H)} HYPE + ${f(K,1)} KNTQ（已留 gas）<br>`+(sp.needH2K?'<span class="warn">这个区间需要更多 KNTQ，本工具不换 HYPE→KNTQ，多出的 HYPE 会留在钱包</span><br>':sp.dK>0n?`需卖出约 <b>${f(sp.dK,1)} KNTQ → ${f(sp.out)} HYPE</b>（池费 1%）<br>`:'')+`新仓约 ${f(H2)} HYPE + ${f(K2,1)} KNTQ，流动性 ${Number(L).toExponential(3)}，预计占活跃流动性 ${share.toFixed(1)}%`;
+  $('mInfo').innerHTML=`目标池子 <b>${C.POOL_NAME}</b>，新区间 <b>${r.lo.toPrecision(5)} ~ ${r.hi.toPrecision(5)}</b> HYPE/KNTQ（tick ${r.tl}~${r.tu}，现价 ${S.pool.hypePerKntq.toPrecision(5)}${inr?'':' <span class="bad">不在新区间内</span>'}）<br>撤出 ${live.length} 个仓位：${live.map(p=>'#'+p.id).join(' ')}；合计可用约 ${f(H)} HYPE + ${f(K,1)} KNTQ（已留 gas）<br>`+(sp.dH>0n?`需卖出约 <b>${f(sp.dH)} HYPE → ${f(sp.outK,1)} KNTQ</b>（已算价格冲击，换完价格约 ${(1/sp.pAfter).toPrecision(5)}）<br>`:sp.dK>0n?`需卖出约 <b>${f(sp.dK,1)} KNTQ → ${f(sp.out)} HYPE</b>（已算价格冲击，换完价格约 ${(1/(sp.pAfter||sp.p)).toPrecision(5)}）<br>`:'')+`新仓约 ${f(H2)} HYPE + ${f(K2,1)} KNTQ，流动性 ${Number(L).toExponential(3)}，预计占活跃流动性 ${share.toFixed(1)}%`;
   return{r,live,sp}}
 async function migrate(){const slip=BigInt(Math.round(+$('iSlip').value*100));let {r,live}=await mEstimate();
-  if(!await confirmBox('一键移仓','将依次：\n1. 撤出 '+live.map(p=>'#'+p.id).join(' ')+'（含手续费）\n2. 如需要，授权并把多出的 KNTQ 换成 HYPE\n3. 按 '+r.lo.toPrecision(5)+' ~ '+r.hi.toPrecision(5)+' 建新仓\n每步都要你在钱包签名，任何一步取消都会停下，已完成的步骤不会回滚（撤出的币会在你钱包里）。'))return;
+  if(!await confirmBox('一键移仓','将依次：\n1. 撤出 '+live.map(p=>'#'+p.id).join(' ')+'（含手续费）\n2. 如需要，把多出的那种币换成另一种（已计入价格冲击）\n3. 按 '+r.lo.toPrecision(5)+' ~ '+r.hi.toPrecision(5)+' 建新仓\n每步都要你在钱包签名，任何一步取消都会停下，已完成的步骤不会回滚（撤出的币会在你钱包里）。'))return;
   if(live.length){const list=live.map(p=>({tokenId:BigInt(p.id),L:p.liquidity,min0:p.amount0*(10000n-slip)/10000n,min1:p.amount1*(10000n-slip)/10000n}));
     const rc=await sendTx('移仓 1/3：撤出全部仓位',LP.buildRemoveMany(list,S.acct),`撤出 ${live.map(p=>'#'+p.id).join(' ')} 全部流动性+手续费到钱包\n最少到账 ${f(list.reduce((a,x)=>a+x.min0,0n))} HYPE + ${f(list.reduce((a,x)=>a+x.min1,0n),1)} KNTQ`);if(!rc)return;
     await new Promise(r=>setTimeout(r,2000))}
   await refreshTop();const gas=E.parseEther(String(+$('mGas').value||0));const Hw=S.bal.hype>gas?S.bal.hype-gas:0n;
-  const sp=LP.swapPlan(S.pool.sqrtP,r.tl,r.tu,Hw,S.bal.kntq,S.pool.lpFee||C.FEE);
-  if(sp.dK>E.parseEther('1')){const a=await rpc(p=>LP.p2AllowUR(p,S.acct));
+  const sp=LP.swapPlan2(S.pool.sqrtP,S.pool.liquidity,r.tl,r.tu,Hw,S.bal.kntq,S.pool.lpFee||C.FEE);
+  if(sp.dH&&sp.dH>E.parseEther('0.05')){const minOut=sp.outK*(10000n-slip)/10000n;
+    if(!await sendTx('移仓 2/3：卖 HYPE 换 KNTQ',LP.buildSwapH2K({amountIn:sp.dH,minOut}),`卖出 ${f(sp.dH)} HYPE\n预计得 ${f(sp.outK,1)} KNTQ，最少 ${f(minOut,1)} KNTQ（滑点 ${$('iSlip').value}%）`))return;
+    await new Promise(r=>setTimeout(r,2000));await refreshTop()}
+  else if(sp.dK>E.parseEther('1')){const a=await rpc(p=>LP.p2AllowUR(p,S.acct));
     if(S.bal.erc20ToPermit2<sp.dK){if(!await sendTx('授权 KNTQ 给 Permit2',LP.buildApproveP2(),'KNTQ.approve(Permit2, 无限)'))return}
     if(a.amt<sp.dK||a.exp<Date.now()/1000+600){if(!await sendTx('移仓 2/3：授权 Uniswap 路由',LP.buildP2ApproveUR(),'Permit2.approve(KNTQ → Uniswap Universal Router '+C.UR+'，30 天)\n这是 Uniswap 官方在 Elysium 部署的路由'))return}
     const minOut=sp.out*(10000n-slip)/10000n;
