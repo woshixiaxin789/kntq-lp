@@ -497,7 +497,14 @@ const chIn=()=>CH.mode==='b'?[$('bLo'),$('bHi')]:[$('mLo'),$('mHi')];
 const p2tick=p=>-Math.log(p)/Math.log(1.0001);
 const SANE=12000;const chCur=()=>S.pool?S.pool.tick:52000;
 function chRangeTicks(){const [lo,hi]=chIn().map(x=>+x.value);if(!(lo>0&&hi>lo))return null;const r={tHiP:p2tick(hi),tLoP:p2tick(lo)},c=chCur();if(r.tHiP<c-SANE||r.tLoP>c+SANE)return null;return r}
-function chFix(){const [a,b]=chIn();if(chRangeTicks())return;const c=chCur(),TS=C.TS,ps=Object.values(S.pos||{}).find(p=>p.liquidity>0n);let tl=ps?ps.tickLower:Math.floor((c-500)/TS)*TS,tu=ps?ps.tickUpper:Math.ceil((c+500)/TS)*TS;tl=Math.round(tl/TS)*TS;tu=Math.round(tu/TS)*TS;if(tu-tl<TS)tu=tl+TS;a.value=t2p(tu).toPrecision(5);b.value=t2p(tl).toPrecision(5)} // tHiP < tLoP
+function chFix(mode){const [a,b]=chIn(),r=chRangeTicks(),c=chCur();
+  // mode: undefined=只修坏区间; 'auto'=区间不含现价也重置; 'force'=总是重置
+  if(r&&mode!=='force'&&!(mode==='auto'&&!(r.tHiP<=c&&c<r.tLoP)))return;
+  const TS=C.TS,ps=Object.values(S.pos||{}).filter(p=>p.liquidity>0n);
+  let w=ps.length?Math.max(...ps.map(p=>p.tickUpper-p.tickLower)):Math.max(TS,Math.round(300/TS)*TS);
+  w=Math.max(TS,Math.round(w/TS)*TS);
+  let tl=Math.floor((c-w/2)/TS)*TS;if(tl>c)tl-=TS;let tu=tl+w;if(tu<=c){tl+=TS;tu+=TS}
+  a.value=t2p(tu).toPrecision(5);b.value=t2p(tl).toPrecision(5)} // tHiP < tLoP
 function chView(){const cur=S.pool?S.pool.tick:52000;let mn=cur,mx=cur;
   if(CH.hist)for(const q of CH.hist.pts){if(Math.abs(q[1]-cur)>SANE)continue;if(q[1]<mn)mn=q[1];if(q[1]>mx)mx=q[1]}
   const r=chRangeTicks();if(r){mn=Math.min(mn,r.tHiP);mx=Math.max(mx,r.tLoP)}
@@ -551,7 +558,7 @@ const chEnd=e=>{if(!CH.drag)return;CH.drag=null;chDraw();chAfter()};cv.addEventL
 document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{CH.mode=b.dataset.cm;chFix();document.querySelectorAll('[data-cm]').forEach(x=>x.className=x===b?'':'alt');CH.span=null;chDraw()});
 document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{CH.hours=+b.dataset.ch;document.querySelectorAll('[data-ch]').forEach(x=>x.className=x===b?'':'alt');loadHist()});
 $('czIn').onclick=()=>{chView();CH.span=Math.max(400,CH.span/1.5);chDraw()};$('czOut').onclick=()=>{chView();CH.span*=1.5;chDraw()};
-$('czFit').onclick=()=>{chFix();CH.span=null;chDraw();chAfter()};
+$('czFit').onclick=()=>{chFix('force');CH.span=null;chDraw();chAfter()};
 async function loadLiq(){try{CH.liq=await rpc(p=>liqDist(p,LP),20000);CH.lastLiq=Date.now();
   // align segment L with pool active L (ticks outside scanned words)
   if(S.pool){const s=CH.liq.segs.find(s=>s[0]<=S.pool.tick&&S.pool.tick<s[1]);if(s){const dlt=S.pool.liquidity-s[2];CH.liq.segs.forEach(x=>x[2]+=dlt)}}chDraw()}catch(e){console.warn('liq',e)}}
@@ -559,6 +566,6 @@ let _hg=0;async function loadHist(){const g=++_hg;CH.loading=true;CH.hist=null;$
 function chTick(){if(CH.hist&&S.pool){CH.hist.pts.push([CH.hist.head+Math.round((Date.now()/1000-CH.hist.headTs)*9.67),S.pool.tick])}if(Date.now()-CH.lastLiq>120e3)loadLiq();chDraw()}
 window.addEventListener('resize',chDraw);
 
-(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix();CH.mode='b';chFix();CH.mode=m;CH.span=null;chDraw()});
+(async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix('auto');CH.mode='b';chFix('auto');CH.mode=m;CH.span=null;chDraw()});
   setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000)})();
 </script></body></html>
