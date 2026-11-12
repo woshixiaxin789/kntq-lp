@@ -637,7 +637,7 @@ async function loadLiq(){try{CH.liq=await rpc(p=>liqDist(p,LP),20000);CH.lastLiq
   // align segment L with pool active L (ticks outside scanned words)
   if(S.pool){const s=CH.liq.segs.find(s=>s[0]<=S.pool.tick&&S.pool.tick<s[1]);if(s){const dlt=S.pool.liquidity-s[2];CH.liq.segs.forEach(x=>x[2]+=dlt)}}chDraw()}catch(e){console.warn('liq',e)}}
 let _hg=0;async function loadHist(){const g=++_hg;CH.loading=true;CH.hist=null;$('chSt').textContent='走势 0%';chDraw();try{const h=await priceHist(P0,LP,CH.hours,(d,t)=>{if(g===_hg)$('chSt').textContent=`走势 ${Math.round(d/t*100)}%`},()=>g!==_hg);if(g!==_hg)return;CH.hist=h;$('chSt').textContent=''}catch(e){if(g!==_hg)return;$('chSt').innerHTML='走势读取失败，<a href="#" id="chRetry">点这里重试</a>';const a=document.getElementById('chRetry');if(a)a.onclick=ev=>{ev.preventDefault();loadHist()}}CH.loading=false;chDraw()}
-function chTick(){if(CH.hist&&S.pool){const H=CH.hist,rt=H.t0!=null?(H.head-H.b0)/(H.headTs-H.t0):9.67;H.pts.push([H.head+Math.round((Date.now()/1000-H.headTs)*rt),S.pool.tick])}if(Date.now()-CH.lastLiq>120e3)loadLiq();chDraw()}
+function chTick(){if(CH.hist&&S.pool){const H=CH.hist,rt=H.t0!=null?(H.head-H.b0)/(H.headTs-H.t0):9.67;H.pts.push([H.head+Math.round((Date.now()/1000-H.headTs)*rt),S.pool.tick])}if(Date.now()-CH.lastLiq>60e3)loadLiq();chDraw()}
 window.addEventListener('resize',chDraw);
 
 // 成交量与份额面板
@@ -667,13 +667,16 @@ function stRender(){stDraw();const d=ST.data;if(!d){$('stTbl').innerHTML='';$('s
  const r=d.buckets.slice().reverse().map(b=>{const t=new Date(b.t*1000);const lab=String(t.getHours()).padStart(2,'0')+':00';
   return `<tr><td>${lab}</td><td>${b.vol.toFixed(0)}</td><td>${b.fee.toFixed(2)}</td><td>${b.fee?Math.round(b.inR*100)+'%':'-'}</td><td>${b.inFee?Math.round(b.inShare*100)+'%':'-'}</td><td><b>${b.my.toFixed(2)}</b></td></tr>`}).join('');
  $('stTbl').innerHTML=`<table class="st"><tr><th>时段</th><th>成交量</th><th>池子手续费</th><th>在区间</th><th>区间内份额</th><th>你的收益</th></tr>${r}</table>`}
-async function stLoad(){if(ST.busy)return;ST.busy=true;ST.data=null;stRender();$('stSt').textContent='读取 0%';
+async function stLoad(q){if(ST.busy)return;ST.busy=true;const quiet=q===true;if(!quiet){ST.data=null;stRender()}$('stSt').textContent='读取 0%';
  try{for(let k=0;k<40&&!S._posLoaded;k++)await new Promise(r=>setTimeout(r,500));const cur={};for(const [id,p] of Object.entries(S.pos||{}))if(p&&p.isOurPool&&!p.otherPool)cur[String(id)]=p;
  ST.data=await poolStats(LP,{hours:ST.hours,me:S.acct,ids:store.get('lp_ids',[]),cur:S._posLoaded?cur:null},(a,b)=>$('stSt').textContent=`读取 ${Math.round(a/b*100)}%`);$('stSt').textContent='更新于 '+new Date().toLocaleTimeString().slice(0,5)}
  catch(e){$('stSt').textContent='读取失败：'+e.message}ST.busy=false;stRender()}
 document.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{ST.hours=+b.dataset.sh;document.querySelectorAll('[data-sh]').forEach(x=>x.className=x===b?'':'alt');stLoad()});
-$('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(stLoad,6000);
+$('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(stLoad,6000);setInterval(()=>{if(!document.hidden)stLoad(true)},180e3);
 
 (async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix('auto');CH.mode='b';chFix('auto');CH.mode=m;CH.span=null;chDraw()});
-  setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000)})();
+  setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000);
+  // 快速刷新：每 8 秒只读池子价格，更新现价和走势线
+  let _ft=0;setInterval(async()=>{if(document.hidden||S.busy||_ft)return;_ft=1;try{const pl=await rpc(p=>LP.readPool(p));S.pool=pl;$('vP').textContent=pl.hypePerKntq.toPrecision(5);$('vT').textContent=pl.tick;$('vKU').textContent=S.hypeUsd?usd(pl.hypePerKntq*S.hypeUsd):'-';chTick()}catch(e){}_ft=0},8000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!S.busy){refreshTop().then(chTick).catch(()=>{});refreshPositions().catch(()=>{})}})})();
 </script></body></html>
