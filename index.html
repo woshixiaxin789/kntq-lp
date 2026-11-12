@@ -344,6 +344,8 @@ async function priceHist(p,LP,hours=6,onP,isStale){const E=LP.E,C=LP.C;const top
  const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),ms))]);
  let head=null;for(let t=0;t<6&&head==null;t++){try{head=await TO(ps[t%ps.length].getBlockNumber(),8000)}catch(e){}}if(head==null)throw new Error('head');
  const blocks=Math.round(hours*29000);const out=[];const chunks=[];
+ let fast=null;try{fast=await TO(LP.provider(0).getLogs({address:C.PM,topics:[topic,C.POOL_ID],fromBlock:head-blocks,toBlock:head}),15000)}catch(e){}
+ if(fast){onP&&onP(1,1);for(const l of fast){const d=E.AbiCoder.defaultAbiCoder().decode(['int128','int128','uint160','uint128','int24','uint24'],l.data);out.push([l.blockNumber,Number(d[4])])}}else
  for(let b=head;b>head-blocks;b-=10000)chunks.push([Math.max(b-9999,head-blocks),b]);let i=0,done=0,fail=0;
  async function w(wi){while(i<chunks.length){if(isStale&&isStale())return;const [a,b]=chunks[i++];let ok=false;for(let t=0;t<6&&!ok;t++){const pr=ps[(wi+t)%ps.length];try{const ls=await TO(pr.getLogs({address:C.PM,topics:[topic,C.POOL_ID],fromBlock:a,toBlock:b}),15000);for(const l of ls){const d=E.AbiCoder.defaultAbiCoder().decode(['int128','int128','uint160','uint128','int24','uint24'],l.data);out.push([l.blockNumber,Number(d[4])])}ok=true}catch(e){await new Promise(r=>setTimeout(r,800*(t+1)))}}if(!ok)fail++;done++;onP&&onP(done,chunks.length)}}
  await Promise.all([0,1,2].map(w));if(isStale&&isStale())throw new Error('stale');if(fail>chunks.length/3)throw new Error('logs');out.sort((a,b)=>a[0]-b[0]);let headTs=Math.floor(Date.now()/1000);try{headTs=(await TO(ps[1].getBlock(head),8000)).timestamp}catch(e){}let b0=head-blocks,t0=null;for(let t=0;t<3&&t0==null;t++){try{t0=(await TO(ps[(t+1)%ps.length].getBlock(b0),8000)).timestamp}catch(e){}}if(t0==null)t0=headTs-blocks/9.67;return{head,headTs,b0,t0,pts:out}}
@@ -366,8 +368,8 @@ async function poolStats(LP,opt,onP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAb
  const bTs=b=>{if(K.length<2)return lin(b);let j=0;while(j<K.length-2&&K[j+1][0]<b)j++;const [b0,t0]=K[j],[b1,t1]=K[j+1];return t0+(b-b0)*(t1-t0)/Math.max(1,b1-b0)};
  const filters=[{address:C.PM,topics:[TSW,C.POOL_ID]},{address:C.PM,topics:[TM,C.POOL_ID,E.zeroPadValue(C.POSM,32)]}];
  if(me)filters.push({address:C.POSM,topics:[TT,null,E.zeroPadValue(me,32)]});
- const chunks=[];for(let f=0;f<filters.length;f++)for(let b=A;b<=head;b+=10000)chunks.push([f,b,Math.min(b+9999,head)]);
- const res=filters.map(()=>[]);let i=0,done=0,fail=0;
+ const res=filters.map(()=>[]);const chunks=[];const P0k=LP.provider(0);
+ await Promise.all(filters.map(async(fl,f)=>{let ok=false;try{res[f]=await TO(P0k.getLogs({...fl,fromBlock:A,toBlock:head}),20000);ok=true}catch(e){}if(!ok)for(let b=A;b<=head;b+=10000)chunks.push([f,b,Math.min(b+9999,head)])}));onP&&onP(1,2);let i=0,done=0,fail=0;
  async function w(wi){while(i<chunks.length){const [f,a,b]=chunks[i++];let ok=false;for(let t=0;t<6&&!ok;t++){const pr=ps[(wi+t)%ps.length];try{res[f].push(...await TO(pr.getLogs({...filters[f],fromBlock:a,toBlock:b}),15000));ok=true}catch(e){await new Promise(r=>setTimeout(r,700*(t+1)))}}if(!ok)fail++;done++;onP&&onP(done,chunks.length)}}
  await Promise.all([0,1,2,3].map(w));if(fail)throw new Error('有 '+fail+' 段日志读取失败，稍后再试');
  const ord=(p,q)=>p.blockNumber-q.blockNumber||p.index-q.index;
