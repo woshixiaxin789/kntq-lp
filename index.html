@@ -603,7 +603,7 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
   // handles
   if(r){[['hi',r.tHiP,'上 '],['lo',r.tLoP,'下 ']].forEach(([k,t,nm])=>{const y=tY(t,v,h),act=CH.drag&&(CH.drag.k===k||CH.drag.k==='band');
     cx.strokeStyle=act?'#e6e3dc':'#c9b28a';cx.lineWidth=act?3:2;cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.lineWidth=1;
-    const p=t2p(t);lbl(nm+p.toPrecision(4)+'  '+pct(p),6,y,'#c9b28a','#2a2418','left');
+    const p=t2p(t);lbl(nm+p.toPrecision(4)+'  '+pct(p),6,y,'#c9b28a','#2a2418','left',k==='lo');
     // grip
     cx.fillStyle='#e6e3dc';cx.beginPath();cx.roundRect?cx.roundRect(LW/2-22,y-7,44,14,7):cx.rect(LW/2-22,y-7,44,14);cx.fill();cx.fillStyle='#c9b28a';for(let i=-1;i<=1;i++)cx.fillRect(LW/2-9,y-3+i*3+1,18,1.4)})}
 }
@@ -617,7 +617,7 @@ function chAxis(b0,b1,X,h){const H=CH.hist;if(H.t0==null)return;const ta=chBT(b0
   for(;t<tb;t+=st){const b=H.b0+(t-H.t0)*r,x=X(b);if(x<pad||x>X(b1)-pad)continue;const d=new Date(t*1000),s=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
     cx.strokeStyle='rgba(255,255,255,.07)';cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,h-18);cx.stroke();cx.fillStyle='rgba(139,138,133,.9)';cx.fillText(s,x,h-5)}
   cx.textBaseline='middle';cx.textAlign='left'}
-function lbl(t,x,y,bg,fg,al){cx.font='600 11.5px -apple-system,system-ui,sans-serif';const tw=cx.measureText(t).width+12,x0=al==='right'?x-tw:x;cx.fillStyle=bg;cx.beginPath();cx.roundRect?cx.roundRect(x0,y-19,tw,17,6):cx.rect(x0,y-19,tw,17);cx.fill();cx.fillStyle=fg;cx.textAlign='left';cx.textBaseline='middle';cx.fillText(t,x0+6,y-10.5)}
+function lbl(t,x,y,bg,fg,al,dn){if(dn)y+=21;cx.font='600 11.5px -apple-system,system-ui,sans-serif';const tw=cx.measureText(t).width+12,x0=al==='right'?x-tw:x;cx.fillStyle=bg;cx.beginPath();cx.roundRect?cx.roundRect(x0,y-19,tw,17,6):cx.rect(x0,y-19,tw,17);cx.fill();cx.fillStyle=fg;cx.textAlign='left';cx.textBaseline='middle';cx.fillText(t,x0+6,y-10.5)}
 function chSet(tHi,tLo){const TS=C.TS,c=chCur();tHi=Math.max(tHi,c-SANE);tLo=Math.min(tLo,c+SANE);tHi=Math.round(tHi/TS)*TS;tLo=Math.round(tLo/TS)*TS;if(tLo-tHi<TS)return false;const [a,b]=chIn();a.value=t2p(tLo).toPrecision(5);b.value=t2p(tHi).toPrecision(5);return true}
 let _cc=null;function chAfter(){clearTimeout(_cc);_cc=setTimeout(()=>{if(CH.mode==='b'){try{store.set('lp_range',[$('bLo').value,$('bHi').value]);if(S.pool&&S.bal)$('calc').innerHTML=planText(buildPlan()).replace(/\n/g,'<br>')}catch(e){$('calc').textContent=e.message}}},150)}
 function evY(e){const rc=cv.getBoundingClientRect();return e.clientY-rc.top}
