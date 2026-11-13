@@ -599,7 +599,7 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
   else{cx.fillStyle='rgba(139,138,133,.9)';cx.textAlign='left';cx.fillText(CH.loading?'读取价格走势中…':'',8,h/2)}
   // current price
   if(S.pool){const y=tY(S.pool.tick,v,h);cx.setLineDash([5,4]);cx.strokeStyle='rgba(230,227,220,.55)';cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.setLineDash([]);
-    lbl('现价 '+S.pool.hypePerKntq.toPrecision(4),LW-4,y,'#d8d5cd','#121315','right')}
+    lbl('现价 '+S.pool.hypePerKntq.toPrecision(4),LW-4,y,'#d8d5cd','#121315','right',true)}
   // handles
   if(r){[['hi',r.tHiP,'上 '],['lo',r.tLoP,'下 ']].forEach(([k,t,nm])=>{const y=tY(t,v,h),act=CH.drag&&(CH.drag.k===k||CH.drag.k==='band');
     cx.strokeStyle=act?'#e6e3dc':'#c9b28a';cx.lineWidth=act?3:2;cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.lineWidth=1;
