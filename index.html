@@ -74,6 +74,7 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 
 <div class="card"><div class="row"><h2 class="grow">成交量与份额</h2><span id="stSt" class="mut"></span></div>
 <div class="row" style="margin-bottom:8px"><button class="alt" data-sh="6">6h</button><button data-sh="12">12h</button><button class="alt" data-sh="24">24h</button><span class="grow"></span><button class="alt" id="stRef">刷新</button></div>
+<div class="row" style="margin-bottom:8px"><button data-sp="cur">当前池子</button><button class="alt" data-sp="aero">Aero 池</button></div>
 <canvas id="stc" style="width:100%;height:220px;display:block;border-radius:12px;background:#121315;border:1px solid var(--line);box-shadow:inset 0 1px 3px rgba(0,0,0,.5)"></canvas>
 <div class="row mut" style="margin:6px 0 2px;gap:14px"><span><i class="lg" style="background:#3a3b40"></i>池子手续费</span><span><i class="lg" style="background:#c2a878"></i>你的收益</span><span><i class="lg" style="background:#9aa3b5;height:3px"></i>你的份额（右轴）</span></div>
 <div id="stV" class="vd"></div>
@@ -430,13 +431,22 @@ async function poolStats(LP,opt,onP){const E=LP.E,C=LP.C,ab=E.AbiCoder.defaultAb
  const lin=b=>aTs+(b-A)*(hTs-aTs)/Math.max(1,head-A);const kp=[];for(let b=A;b<head;b+=20000)kp.push(b);kp.push(head);
  const kts=await Promise.all(kp.map((b,j)=>TO(ps[j%ps.length].getBlock(b),8000).then(x=>x.timestamp,()=>null)));const K=kp.map((b,j)=>[b,kts[j]]).filter(x=>x[1]!=null);
  const bTs=b=>{if(K.length<2)return lin(b);let j=0;while(j<K.length-2&&K[j+1][0]<b)j++;const [b0,t0]=K[j],[b1,t1]=K[j+1];return t0+(b-b0)*(t1-t0)/Math.max(1,b1-b0)};
- const filters=[{address:C.PM,topics:[TSW,C.POOL_ID]},{address:C.PM,topics:[TM,C.POOL_ID,E.zeroPadValue(C.POSM,32)]}];
- if(me)filters.push({address:C.POSM,topics:[TT,null,E.zeroPadValue(me,32)]});
+ const AE=opt.aero?(LP.AERO||{POOL:'0x5ecb73050f35d8bd67231512c3bef91ad0b3dcc7',FEE_PPM:4300}):null;
+ const TSWA=E.id('Swap(address,address,int256,int256,uint160,uint128,int24)');
+ let aFee=AE?AE.FEE_PPM:0;if(AE){for(let t=0;t<3;t++){try{aFee=Number(await TO(ps[t%ps.length].call({to:AE.POOL,data:'0xddca3f43'}),8000));break}catch(e){}}}
+ const filters=AE?[{address:AE.POOL,topics:[TSWA]}]:[{address:C.PM,topics:[TSW,C.POOL_ID]},{address:C.PM,topics:[TM,C.POOL_ID,E.zeroPadValue(C.POSM,32)]}];
+ if(me&&!AE)filters.push({address:C.POSM,topics:[TT,null,E.zeroPadValue(me,32)]});
  const res=filters.map(()=>[]);const chunks=[];const P0k=LP.provider(0);
  await Promise.all(filters.map(async(fl,f)=>{let ok=false;try{res[f]=await TO(P0k.getLogs({...fl,fromBlock:A,toBlock:head}),20000);ok=true}catch(e){}if(!ok)for(let b=A;b<=head;b+=10000)chunks.push([f,b,Math.min(b+9999,head)])}));onP&&onP(1,2);let i=0,done=0,fail=0;
  async function w(wi){while(i<chunks.length){const [f,a,b]=chunks[i++];let ok=false;for(let t=0;t<6&&!ok;t++){const pr=ps[(wi+t)%ps.length];try{res[f].push(...await TO(pr.getLogs({...filters[f],fromBlock:a,toBlock:b}),15000));ok=true}catch(e){await new Promise(r=>setTimeout(r,700*(t+1)))}}if(!ok)fail++;done++;onP&&onP(done,chunks.length)}}
  await Promise.all([0,1,2,3].map(w));if(fail)throw new Error('有 '+fail+' 段日志读取失败，稍后再试');
  const ord=(p,q)=>p.blockNumber-q.blockNumber||p.index-q.index;
+
+ if(AE){const nB=Math.ceil((now-startTs)/3600);const B=[];for(let h=0;h<nB;h++)B.push({t:startTs+h*3600,vol:0,fee:0,my:0,inFee:0,n:0,buy:0,sell:0,big:0,actL:0n});
+  for(const l of res[0].sort(ord)){const d=ab.decode(['int256','int256','uint160','uint128','int24'],l.data);const a0=d[0],a1=d[1],tk=Number(d[4]);const px=1/Math.pow(1.0001,tk);
+   const vin=a0>0n?Number(a0)/1e18:Number(a1)/1e18*px;const ts=bTs(l.blockNumber);if(ts<startTs)continue;const b=B[Math.min(nB-1,Math.floor((ts-startTs)/3600))];
+   b.vol+=vin;b.fee+=vin*aFee/1e6;b.n++;if(a0>0n)b.buy+=vin;else b.sell+=vin;if(vin>=10)b.big++;b.actL=d[3]}
+  for(const b of B){b.share=0;b.inR=0;b.inShare=0}return{startTs,now,buckets:B,ids:[],aero:true,feePpm:aFee}}
  const mine=new Set(ids0.map(String));if(me)for(const l of res[2])mine.add(BigInt(l.topics[3]).toString());
  const mods=res[1].map(l=>{const d=ab.decode(['int24','int24','int256','bytes32'],l.data);return{l,tl:Number(d[0]),tu:Number(d[1]),dl:BigInt(d[2]),id:BigInt(d[3]).toString()}}).filter(m=>mine.has(m.id));
  // starting L per position = current L − deltas inside window
@@ -751,7 +761,7 @@ function chTick(){if(CH.hist&&S.pool){const H=CH.hist,rt=H.t0!=null?(H.head-H.b0
 window.addEventListener('resize',chDraw);
 
 // 成交量与份额面板
-const ST={hours:12,data:null,busy:false};
+const ST={hours:12,data:null,busy:false,aero:store.get('st_aero',false)};
 function stDraw(){const cv=$('stc');if(!cv)return;const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const cx=cv.getContext('2d');cx.scale(dpr,dpr);cx.clearRect(0,0,w,h);
  cx.font='11px -apple-system,PingFang SC,sans-serif';const d=ST.data;if(!d){cx.fillStyle='rgba(139,138,133,.9)';cx.fillText(ST.busy?'读取中…':'点「刷新」读取',10,h/2);return}
  const B=d.buckets,n=B.length,padL=34,padR=34,top=14,bot=22,W=w-padL-padR,H=h-top-bot;const mx=Math.max(...B.map(b=>b.fee),0.01);
@@ -760,6 +770,7 @@ function stDraw(){const cv=$('stc');if(!cv)return;const dpr=window.devicePixelRa
  const bw=W/n;B.forEach((b,i)=>{const x=padL+i*bw+bw*.15,bwi=bw*.7;const y1=top+H*(1-b.fee/mx),y2=top+H*(1-b.my/mx);
   cx.fillStyle='#3a3b40';cx.fillRect(x,y1,bwi,top+H-y1);cx.fillStyle='#c2a878';cx.fillRect(x+bwi*.2,y2,bwi*.6,top+H-y2);
   if(n<=12||i%2===0){cx.fillStyle='rgba(139,138,133,.85)';cx.textAlign='center';cx.fillText(new Date(b.t*1000).getHours()+'时',x+bwi/2,h-6)}});
+ if(d.aero){cx.lineWidth=1;return}
  cx.strokeStyle='#9aa3b5';cx.lineWidth=1.6;cx.beginPath();let st=false;B.forEach((b,i)=>{if(!b.fee)return;const x=padL+i*bw+bw/2,y=top+H*(1-b.share);st?cx.lineTo(x,y):cx.moveTo(x,y);st=true});cx.stroke();
  cx.fillStyle='#9aa3b5';B.forEach((b,i)=>{if(!b.fee)return;cx.beginPath();cx.arc(padL+i*bw+bw/2,top+H*(1-b.share),2.5,0,7);cx.fill()});cx.lineWidth=1}
 function stVerdict(B){const full=B.slice(0,-1).filter(b=>b.fee>0);if(full.length<3)return'数据不够，至少要 4 小时。';
@@ -773,15 +784,20 @@ function stVerdict(B){const full=B.slice(0,-1).filter(b=>b.fee>0);if(full.length
  s+=`池子手续费 ${sg(f1)}，在区间时间 ${sg(f2)}，区间内份额 ${sg(f3)}。`;
  if(Math.abs(fm)>=10)s+=`主要是${fac[0][0]}${fac[0][1]<0?'变少':'变多'}了。`;else s+='整体变化不大。';return s}
 function stRender(){stDraw();const d=ST.data;if(!d){$('stTbl').innerHTML='';$('stV').textContent='';return}
+ if(d.aero){const B=d.buckets,full=B.slice(0,-1),tot=B.reduce((s,b)=>s+b.vol,0),tf=B.reduce((s,b)=>s+b.fee,0),last=full[full.length-1];
+  $('stV').textContent=`Aero Slipstream 池（0x5ecb），当前费率 ${(d.feePpm/1e4).toFixed(2)}%（动态，按当前费率估）。这 ${B.length} 小时共成交 ${tot.toFixed(0)} HYPE，手续费约 ${tf.toFixed(2)} HYPE`+(last?`；上一整小时 ${last.vol.toFixed(0)} HYPE。`:'。')+'你在这个池子没有仓位。';
+  const r=B.slice().reverse().map(b=>{const t=new Date(b.t*1000);const lab=String(t.getHours()).padStart(2,'0')+':00';return `<tr><td>${lab}</td><td>${b.vol.toFixed(0)}</td><td>${b.fee.toFixed(2)}</td><td>${b.buy.toFixed(0)}</td><td>${b.sell.toFixed(0)}</td><td>${b.n}</td><td>${b.big}</td></tr>`}).join('');
+  $('stTbl').innerHTML=`<table class="st"><tr><th>时段</th><th>成交量</th><th>池子手续费</th><th>买入</th><th>卖出</th><th>笔数</th><th>≥10 大单</th></tr>${r}</table>`;return}
  $('stV').textContent=stVerdict(d.buckets);
  const r=d.buckets.slice().reverse().map(b=>{const t=new Date(b.t*1000);const lab=String(t.getHours()).padStart(2,'0')+':00';
   return `<tr><td>${lab}</td><td>${b.vol.toFixed(0)}</td><td>${b.fee.toFixed(2)}</td><td>${b.fee?Math.round(b.inR*100)+'%':'-'}</td><td>${b.inFee?Math.round(b.inShare*100)+'%':'-'}</td><td><b>${b.my.toFixed(2)}</b></td></tr>`}).join('');
  $('stTbl').innerHTML=`<table class="st"><tr><th>时段</th><th>成交量</th><th>池子手续费</th><th>在区间</th><th>区间内份额</th><th>你的收益</th></tr>${r}</table>`}
 async function stLoad(q){if(ST.busy)return;ST.busy=true;const quiet=q===true;if(!quiet){ST.data=null;stRender()}$('stSt').textContent='读取 0%';
  try{for(let k=0;k<40&&!S._posLoaded;k++)await new Promise(r=>setTimeout(r,500));const cur={};for(const [id,p] of Object.entries(S.pos||{}))if(p&&p.isOurPool&&!p.otherPool)cur[String(id)]=p;
- ST.data=await poolStats(LP,{hours:ST.hours,me:S.acct,ids:store.get('lp_ids',[]),cur:S._posLoaded?cur:null},(a,b)=>$('stSt').textContent=`读取 ${Math.round(a/b*100)}%`);$('stSt').textContent='更新于 '+new Date().toLocaleTimeString().slice(0,5)}
+ ST.data=await poolStats(LP,{aero:ST.aero,hours:ST.hours,me:S.acct,ids:store.get('lp_ids',[]),cur:S._posLoaded?cur:null},(a,b)=>$('stSt').textContent=`读取 ${Math.round(a/b*100)}%`);$('stSt').textContent='更新于 '+new Date().toLocaleTimeString().slice(0,5)}
  catch(e){$('stSt').textContent='读取失败：'+e.message}ST.busy=false;stRender()}
 document.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{ST.hours=+b.dataset.sh;document.querySelectorAll('[data-sh]').forEach(x=>x.className=x===b?'':'alt');stLoad()});
+document.querySelectorAll('[data-sp]').forEach(b=>{b.className=(b.dataset.sp==='aero')===ST.aero?'':'alt';b.onclick=()=>{ST.aero=b.dataset.sp==='aero';store.set('st_aero',ST.aero);document.querySelectorAll('[data-sp]').forEach(x=>x.className=x===b?'':'alt');stLoad()}});
 $('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(stLoad,6000);setInterval(()=>{if(!document.hidden)stLoad(true)},180e3);
 
 (async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix('auto');CH.mode='b';chFix('auto');CH.mode=m;CH.span=null;chDraw()});
