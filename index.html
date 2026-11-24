@@ -113,7 +113,7 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 const E = (typeof module !== 'undefined' && module.exports) ? require('ethers') : root.ethers;
 const C = {
   chainId: 99901,
-  rpcs: ['https://rpc.elysium.kinetiq.xyz', 'https://rpc.asphodelhq.com'],
+  rpcs: ['https://rpc.elysium.kinetiq.xyz', 'https://rpc-elysium-mainnet.t.conduit.xyz', 'https://rpc.asphodelhq.com'],
   PM: '0xe2e105d3f7209a9da11f83ccf3e7398a753823f1',
   POSM: '0x1d1c51b9d07fd27d36412a2b66cc23d19eb3e518',
   PERMIT2: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
@@ -660,7 +660,7 @@ $('bAdd').onclick=()=>{const v=$('iAdd').value.split(/[^0-9]+/).filter(Boolean);
 $('bRef').onclick=()=>refreshTop().then(refreshPositions);$('sort').onchange=refreshPositions;$('hideEmpty').onchange=refreshPositions;
 $('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpcSeq(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
-// ===== 可拖动区间图表 (v14) =====
+// ===== 可拖动区间图表 (v35) =====
 const CH={mode:'b',hours:6,hist:null,liq:null,span:null,center:null,drag:null,loading:false,lastLiq:0};
 const cv=$('rc'),cx=cv.getContext('2d');
 const chIn=()=>CH.mode==='b'?[$('bLo'),$('bHi')]:[$('mLo'),$('mHi')];
@@ -675,10 +675,14 @@ function chFix(mode){const [a,b]=chIn(),r=chRangeTicks(),c=chCur();
   w=Math.max(TS,Math.round(w/TS)*TS);
   let tl=Math.floor((c-w/2)/TS)*TS;if(tl>c)tl-=TS;let tu=tl+w;if(tu<=c){tl+=TS;tu+=TS}
   a.value=t2p(tu).toPrecision(5);b.value=t2p(tl).toPrecision(5)} // tHiP < tLoP
+// v35 插针：一笔把价格打出去 >1.5%、下一笔又回到原位附近（<0.6%），画线和适配时都忽略
+function chSpikes(pts){const sp=new Set();for(let i=0;i<pts.length-1;i++)if(pts[i+1][0]===pts[i][0])sp.add(i); // 同一区块只留最后一笔
+ for(let i=1;i<pts.length-1;i++){if(sp.has(i))continue;let a=i-1;while(a>0&&sp.has(a))a--;const p=pts[a][1];if(Math.abs(pts[i][1]-p)<=150)continue;for(let k=i+1;k<pts.length&&k<=i+4;k++){if(Math.abs(pts[k][1]-p)<60){for(let j=i;j<k;j++)sp.add(j);i=k-1;break}}}return sp}
 function chView(){const cur=S.pool?S.pool.tick:52000;let mn=cur,mx=cur;
-  if(CH.hist)for(const q of CH.hist.pts){if(Math.abs(q[1]-cur)>SANE)continue;if(q[1]<mn)mn=q[1];if(q[1]>mx)mx=q[1]}
+  if(CH.hist&&CH.hist.pts.length){const pts=CH.hist.pts,sp=chSpikes(pts);const ts=pts.filter((q,i)=>!sp.has(i)&&Math.abs(q[1]-cur)<=SANE).map(q=>q[1]).sort((a,b)=>a-b);
+    if(ts.length){const lo=ts[Math.floor(ts.length*.03)],hi=ts[Math.min(ts.length-1,Math.floor(ts.length*.97))];mn=Math.min(mn,lo);mx=Math.max(mx,hi)}}
   const r=chRangeTicks();if(r){mn=Math.min(mn,r.tHiP);mx=Math.max(mx,r.tLoP)}
-  if(CH.span==null){CH.span=Math.max(1200,(mx-mn)*1.35);CH.center=(mx+mn)/2}CH.span=Math.min(Math.max(CH.span,400),SANE*2);CH.center=Math.min(Math.max(CH.center,cur-SANE),cur+SANE)
+  if(CH.span==null){CH.span=Math.max(500,(mx-mn)*1.35);CH.center=(mx+mn)/2}CH.span=Math.min(Math.max(CH.span,400),SANE*2);CH.center=Math.min(Math.max(CH.center,cur-SANE),cur+SANE)
   return{top:CH.center-CH.span/2,bot:CH.center+CH.span/2}}
 function chSize(){const w=cv.clientWidth,h=cv.clientHeight,d=window.devicePixelRatio||1;if(cv.width!==Math.round(w*d)){cv.width=Math.round(w*d);cv.height=Math.round(h*d)}cx.setTransform(d,0,0,d,0,0);return{w,h}}
 const tY=(t,v,h)=>(t-v.top)/(v.bot-v.top)*h, yT=(y,v,h)=>v.top+y/h*(v.bot-v.top);
@@ -698,7 +702,7 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
   // price line
   if(CH.hist&&CH.hist.pts.length){const pts=CH.hist.pts,b0=CH.hist.b0!=null?CH.hist.b0:CH.hist.head-Math.round(CH.hours*34800),b1=Math.max(CH.hist.head,pts[pts.length-1][0]);
     const X=b=>(b-b0)/(b1-b0)*LW;cx.strokeStyle='#d8d5cd';cx.lineWidth=1.4;cx.beginPath();let lastY=null;
-    pts.forEach((q,i)=>{const x=X(q[0]),y=tY(q[1],v,h);if(i===0)cx.moveTo(x,y);else{cx.lineTo(x,lastY);cx.lineTo(x,y)}lastY=y});cx.lineTo(LW,lastY);cx.stroke();cx.lineWidth=1;
+    const sp=chSpikes(pts);pts.forEach((q,i)=>{if(sp.has(i))return;const x=X(q[0]),y=tY(q[1],v,h);if(i===0)cx.moveTo(x,y);else{cx.lineTo(x,lastY);cx.lineTo(x,y)}lastY=y});cx.lineTo(LW,lastY);cx.stroke();cx.lineWidth=1;
     chAxis(b0,b1,X,h)}
   else{cx.fillStyle='rgba(139,138,133,.9)';cx.textAlign='left';cx.fillText(CH.loading?'读取价格走势中…':'',8,h/2)}
   // current price
