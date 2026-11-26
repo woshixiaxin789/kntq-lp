@@ -603,7 +603,7 @@ async function _refreshPositions(){
     const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
     out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
   {const act=out.filter(p=>p.liquidity>0n||p.feeH>=0.001);const tv=act.reduce((a,p)=>a+p.valH,0),tf=act.reduce((a,p)=>a+p.feeH,0),t0=act.reduce((a,p)=>a+Number(E.formatEther(p.amount0)),0),t1=act.reduce((a,p)=>a+Number(E.formatEther(p.amount1)),0),nin=act.filter(p=>p.liquidity>0n&&p.inRange).length,nl=act.filter(p=>p.liquidity>0n).length;const el=$('posTot');
-   if(!act.length){el.style.display='none'}else{el.style.display='';if(!el.dataset.ok){el.innerHTML='<b>LP 合计（本金 + 待领，HYPE 本位）</b><div class="big"><span id="ptV"></span><small>HYPE</small></div><div class="sub">本金 <span id="ptP"></span> · 待领 <span id="ptF"></span><br><span id="ptN"></span></div>';el.dataset.ok=1}
+   if(!act.length){el.style.display='none'}else{el.style.display='';if(!el.dataset.ok){el.innerHTML='<b>LP 合计（本金 + 待领，HYPE 本位）</b><div class="big"><span id="ptV"></span><small>HYPE</small></div><div class="sub">本金 <span id="ptP"></span> · 待领 <span id="ptF"></span><br><span id="ptN"></span></div><div class="row" style="margin-top:8px"><button class="alt" onclick="collectAll()">一键领取全部手续费</button></div>';el.dataset.ok=1}
    const h4=v=>v.toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});cuSet($('ptV'),'ptV',tv+tf,h4);$('ptP').textContent=h4(tv)+' HYPE';$('ptF').textContent=h4(tf)+' HYPE';
    $('ptN').textContent=`${nl} 个仓位，${nin} 个在区间内 · 含 ${t0.toFixed(3)} HYPE + ${Math.round(t1).toLocaleString()} KNTQ${hu?' · ≈'+usd((tv+tf)*hu):''}`}}
   const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};S._posLoaded=1;
@@ -622,6 +622,12 @@ const lvy=(p,x)=>p.levy?x*BigInt(Math.round(p.levy*10000))/10000n:0n; // Nest �
 const net=(p,x)=>x-lvy(p,x);
 // 撤池最少到账：POSM 检查的是「本金 − hook 抽成」，所以 avr 池先减掉抽成再算滑点
 const minOut=(p,slip)=>{const m=(a,fee)=>{const v=a-lvy(p,fee);return v>0n?v*(10000n-slip)/10000n:0n};return{min0:m(p.amount0,p.fee0),min1:m(p.amount1,p.fee1)}};
+async function collectAll(){if(!S.acct)return alert('先连接钱包');const all=Object.values(S.pos).filter(p=>p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase()&&(p.fee0>0n||p.fee1>0n));
+  const lv=all.filter(p=>p.levy),ok=all.filter(p=>!p.levy);if(!ok.length)return alert(lv.length?'只有 Nest 池仓位有待领，Nest 池要逐个领（卡片上的「领取手续费」）':'当前钱包没有待领手续费');
+  const by={};for(const p of ok){const k=p.sym0||'HYPE';by[k]=by[k]||[0n,0n];by[k][0]+=p.fee0;by[k][1]+=p.fee1}
+  const sum=Object.entries(by).map(([k,v])=>`${f(v[0],5)} ${k}`).join(' + ')+' + '+f(ok.reduce((a,p)=>a+p.fee1,0n),3)+' KNTQ';
+  const tx=LP.buildRemoveMany(ok.map(p=>({tokenId:BigInt(p.id),L:0n,min0:0n,min1:0n,t0:p.t0})),S.acct);
+  await sendTx('一键领取 '+ok.length+' 个仓位',tx,`一笔交易领取 ${ok.map(p=>'#'+p.id).join(' ')} 的手续费，本金不动\n约 ${sum} 到 ${S.acct}${lv.length?'\nNest 池仓位 '+lv.map(p=>'#'+p.id).join(' ')+' 不在内，要单独领':''}`)&&(await refreshTop(),await refreshPositions())}
 async function collect(id){const p=S.pos[id];if(p.fee0===0n&&p.fee1===0n)return alert('没有待领手续费');
   if(p.levy){const slip=BigInt(Math.round(+$('iSlip').value*100));const dl=LP.collectDl(p,p.sqrtP);if(dl==null)return alert('这个仓位在区间外，且另一种币还有待领手续费：Nest hook 会让领取失败（本金不够付抽成）。等价格回到区间再领。');
     const u=LP.amountsForLiquidity(p.sqrtP,LP.sqrtAt(p.tickLower),LP.sqrtAt(p.tickUpper),dl);
