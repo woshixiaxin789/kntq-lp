@@ -500,7 +500,7 @@ let P=LP.provider(0);
 const TO=(pr,ms)=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(new Error('超时')),ms))]);
 let PS=null;const prov=()=>PS||(PS=C.rpcs.map((_,i)=>LP.provider(i)));const P0=prov()[0];
 async function rpcSeq(fn,ms=20000){let last;for(let i=0;i<C.rpcs.length;i++){for(let t=0;t<2;t++){try{const r=await TO(fn(t===0?prov()[i]:LP.provider(i)),ms);$('rpcSt').textContent='RPC '+(i+1);return r}catch(e){last=e;console.warn('rpc',i,t,e);await new Promise(r=>setTimeout(r,1000))}}}throw last}
-async function rpc(fn,ms=8000){let last;for(let t=0;t<3;t++){const ps=t===0?prov():C.rpcs.map((_,i)=>LP.provider(i));try{const r=await Promise.any(ps.map((p,i)=>TO(fn(p),ms).then(v=>{$('rpcSt').textContent='RPC '+(i+1);return v})));return r}catch(e){last=(e.errors&&e.errors[0])||e;console.warn('rpc race',t,e);$('rpcSt').textContent='RPC 重试 '+(t+1);await new Promise(r=>setTimeout(r,1000))}}throw last}
+let RI=+(localStorage.getItem('lp_ri')||0);async function rpc(fn,ms=8000){try{const r=await TO(fn(prov()[RI]),5000);$('rpcSt').textContent='RPC '+(RI+1);return r}catch(e){console.warn('rpc pref',RI,e)}let last;for(let t=0;t<3;t++){const ps=t===0?prov():C.rpcs.map((_,i)=>LP.provider(i));try{const r=await Promise.any(ps.map((p,i)=>(t===0&&i===RI?Promise.reject(new Error('skip')):TO(fn(p),ms)).then(v=>{if(RI!==i){RI=i;localStorage.setItem('lp_ri',i)}$('rpcSt').textContent='RPC '+(i+1);return v})));return r}catch(e){last=(e.errors&&e.errors[0])||e;console.warn('rpc race',t,e);$('rpcSt').textContent='RPC 重试 '+(t+1);await new Promise(r=>setTimeout(r,1000))}}throw last}
 async function hypePrice(){const tm=ms=>{const ac=new AbortController();setTimeout(()=>ac.abort(),ms);return ac.signal};
   const src=[()=>fetch('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:'{"type":"allMids"}',signal:tm(6000)}).then(r=>r.json()).then(j=>parseFloat(j.HYPE)),
     ()=>fetch('https://www.okx.com/api/v5/market/ticker?instId=HYPE-USDT',{signal:tm(6000)}).then(r=>r.json()).then(j=>parseFloat(j.data[0].last)),
@@ -591,13 +591,13 @@ let _as=0;async function autoScan(){const ow=S.acct||store.get('lp_owner',null)|
   await rpcSeq(async p=>{const head=await p.getBlockNumber();let from=store.get(key,0);from=from?from+1:Math.max(0,head-100000);
     for(let b=from;b<=head;b+=10000){const e=Math.min(head,b+9999);const lg=await p.getLogs({address:C.POSM,topics:[t,null,to],fromBlock:b,toBlock:e});lg.forEach(l=>found.push(BigInt(l.topics[3]).toString()));store.set(key,e)}},60000);
   const ids=store.get('lp_ids',[]);const nw=[...new Set(found)].filter(x=>!ids.includes(x));if(nw.length){nw.forEach(addId);log('自动发现新仓位 #'+nw.join(', #'),'ok');await refreshPositions()}}catch(e){}finally{_as=0}}
-function addId(id){const ids=store.get('lp_ids',[]);if(!ids.includes(id)){ids.push(id);store.set('lp_ids',ids);log('添加仓位 #'+id)}}
+function addId(id){store.set('lp_dead',store.get('lp_dead',[]).filter(x=>x!==id));const ids=store.get('lp_ids',[]);if(!ids.includes(id)){ids.push(id);store.set('lp_ids',ids);log('添加仓位 #'+id)}}
 function samples(id,feeUsd){const k='lp_h_'+id;let s=store.get(k,[]);const now=Date.now();s.push([now,feeUsd]);s=s.filter(x=>now-x[0]<3600e3);store.set(k,s);return s}
-let _rp=null;async function refreshPositions(){if(_rp)return _rp;_rp=(async()=>{try{await TO(_refreshPositions(),45000)}catch(e){log('仓位刷新出错：'+(e.shortMessage||e.message),'bad');$('positions').innerHTML='<p class="bad">读取失败（节点限流），稍等点「刷新」重试。别开多个本页标签。</p>'}finally{_rp=null}})();return _rp}
+let _rp=null;async function refreshPositions(){if(_rp)return _rp;_rp=(async()=>{try{await TO(_refreshPositions(),45000)}catch(e){log('仓位刷新出错：'+(e.shortMessage||e.message),'bad');if(S._posLoaded&&Object.keys(S.pos).length){log('这次刷新没读到，先显示上一次的数据，30 秒后自动重试','bad')}else $('positions').innerHTML='<p class="bad">读取失败（节点限流），稍等点「刷新」重试。别开多个本页标签。</p>'}finally{_rp=null}})();return _rp}
 async function _refreshPositions(){
-  if(!S.pool)await refreshTop();if(!S.pool)throw new Error('读不到池子');if(!Object.keys(S.pos).length)$('positions').innerHTML=SKEL+SKEL;const ids=store.get('lp_ids',[]);const hu=S.hypeUsd||0,kp=S.pool.hypePerKntq;const out=[];
+  if(!S.pool)await refreshTop();if(!S.pool)throw new Error('读不到池子');if(!Object.keys(S.pos).length)$('positions').innerHTML=SKEL+SKEL;const dead=store.get('lp_dead',[]);const ids=store.get('lp_ids',[]).filter(x=>!($('hideEmpty').checked&&dead.includes(x)));const hu=S.hypeUsd||0,kp=S.pool.hypePerKntq;const out=[];
   const rs=await rpc(async pr=>{const mc=LP.mcRunner(pr);const r=await Promise.all(ids.map(id=>LP.readPosition(mc,BigInt(id),S.pool).then(p=>({p}),e=>({e}))));if(r.length&&r.every(x=>x.e))throw r[0].e;return r});
-  for(let i=0;i<ids.length;i++){const id=ids[i];try{if(rs[i].e)throw rs[i].e;const p=rs[i].p;if(!p.isOurPool)continue;
+  for(let i=0;i<ids.length;i++){const id=ids[i];try{if(rs[i].e)throw rs[i].e;const p=rs[i].p;if(!p.isOurPool)continue;if(p.liquidity===0n&&p.fee0===0n&&p.fee1===0n&&!dead.includes(id)){dead.push(id);store.set('lp_dead',dead)}
     const lk=1-(p.levy||0);const valH=Number(E.formatEther(p.amount0))+Number(E.formatEther(p.amount1))*kp,feeH=(Number(E.formatEther(p.fee0))+Number(E.formatEther(p.fee1))*kp)*lk;
     const val=valH*hu,fee=feeH*hu; // 美元；取不到美元价时 hu=0，界面改显示 HYPE
     const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
@@ -848,6 +848,6 @@ $('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(st
   setTimeout(()=>autoScan().catch(()=>{}),5000);setInterval(()=>{if(!document.hidden)autoScan().catch(()=>{})},60000);
   setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000);
   // 快速刷新：每 8 秒只读池子价格，更新现价和走势线
-  let _ft=0;setInterval(async()=>{if(document.hidden||S.busy||_ft)return;_ft=1;try{const pl=await rpc(p=>LP.readPool(p));S.pool=pl;cuSet($('vP'),'vP',pl.hypePerKntq,v=>v.toPrecision(5));$('vT').textContent=pl.tick;$('vKU').textContent=S.hypeUsd?usd(pl.hypePerKntq*S.hypeUsd):'-';chTick()}catch(e){}_ft=0},8000);
+  let _ft=0;setInterval(async()=>{if(document.hidden||S.busy||_ft)return;_ft=1;try{const pl=await rpc(p=>LP.readPool(p));S.pool=pl;cuSet($('vP'),'vP',pl.hypePerKntq,v=>v.toPrecision(5));$('vT').textContent=pl.tick;$('vKU').textContent=S.hypeUsd?usd(pl.hypePerKntq*S.hypeUsd):'-';chTick()}catch(e){}_ft=0},15000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!S.busy){refreshTop().then(chTick).catch(()=>{});refreshPositions().catch(()=>{})}})})();
 </script></body></html>
