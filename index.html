@@ -555,7 +555,13 @@ function buildPlan(onlyW){ // uses fresh S.pool / S.bal；avr 池 token0 = WHYPE
   const lim='';
   return{tl,tu,L,a0:a.a0,a1:a.a1,max0,max1,inr,why,left0:H-a.a0,left1:K-a.a1,lim}}
 function planText(pl){const wr=C.ERC0&&S.bal&&pl.max0>S.bal.whype?pl.max0-S.bal.whype:0n;return `存入约 ${f(pl.a0)} ${S0} + ${f(pl.a1,2)} KNTQ${S.hypeUsd?'（约 '+usd((Number(E.formatEther(pl.a0))+Number(E.formatEther(pl.a1))*S.pool.hypePerKntq)*S.hypeUsd)+'）':''}\n区间 ${t2p(pl.tu).toPrecision(5)} ~ ${t2p(pl.tl).toPrecision(5)} HYPE/KNTQ（tick ${pl.tl}~${pl.tu}），现价 ${S.pool.hypePerKntq.toPrecision(5)}${pl.inr?'':'\n⚠ 现价不在区间内，只会存一种币，暂时不赚手续费'}${wr>0n?'\n会先把 '+f(wr)+' HYPE 包装成 WHYPE':''}\n剩在钱包约 ${f(pl.left0>0n?pl.left0:0n)} ${C.ERC0?'HYPE/WHYPE':'HYPE'}（另留 gas）+ ${f(pl.left1>0n?pl.left1:0n,2)} KNTQ${pl.lim?'（'+pl.lim+'）':''}${pl.why?'\n'+pl.why:''}`}
-async function calc(){await refreshTop();const pl=buildPlan();$('calc').innerHTML=planText(pl).replace(/\n/g,'<br>')}
+function simText(pl){const y0=Number(E.formatEther(pl.a0)),x0=Number(E.formatEther(pl.a1)),P=S.pool.hypePerKntq,Pa=t2p(pl.tu),Pb=t2p(pl.tl);if(!(Pa>0&&Pb>Pa)||(x0<=0&&y0<=0))return'';
+const sq=Math.sqrt,Pc=Math.min(Math.max(P,Pa),Pb);let L=Infinity;const dx=1/sq(Pc)-1/sq(Pb),dy=sq(Pc)-sq(Pa);if(dx>1e-12&&x0>0)L=Math.min(L,x0/dx);if(dy>1e-12&&y0>0)L=Math.min(L,y0/dy);if(!isFinite(L))return'';
+const hold=(q)=>{const c=Math.min(Math.max(q,Pa),Pb);return{x:L*Math.max(0,1/sq(c)-1/sq(Pb)),y:L*Math.max(0,sq(c)-sq(Pa))}};
+const h0=hold(P),v0=h0.y+h0.x*P,row=(lab,q)=>{const h=hold(q),v=h.y+h.x*q,hv=h0.y+h0.x*q;return `${lab}（${q.toPrecision(4)}）：${h.y.toFixed(3)} HYPE + ${h.x.toFixed(1)} KNTQ ≈ ${v.toFixed(3)} HYPE，比不动 ${((v/hv-1)*100).toFixed(2)}%`};
+const eff=1/(1-Math.pow(Pa/Pb,0.25));
+return `\n\n— 区间模拟（KNTQ 按 HYPE 计价，不含手续费）—\n现在 ≈ ${v0.toFixed(3)} HYPE\n`+[['跌 10%',P*0.9],['跌 5%',P*0.95],['跌到下沿',Pa],['涨到上沿',Pb],['涨 5%',P*1.05],['涨 10%',P*1.1]].sort((a,b)=>a[1]-b[1]).map(r=>row(r[0],r[1])).join('\n')+`\n资金效率约是全区间的 ${eff.toFixed(1)} 倍。出了下沿全是 KNTQ，出了上沿全是 HYPE，都不再赚手续费。`}
+async function calc(){await refreshTop();const pl=buildPlan();$('calc').innerHTML=(planText(pl)+simText(pl)).replace(/\n/g,'<br>')}
 function confirmBox(title,body){return new Promise(r=>{$('mT').textContent=title;$('mB').textContent=body;$('modal').style.display='flex';slReset();_slOk=()=>{$('modal').style.display='none';r(true)};$('mNo').onclick=()=>{_slOk=null;$('modal').style.display='none';r(false)}})}
 // v37 滑动确认：拖到 90% 以上才算确认，中途松手弹回
 let _slOk=null;const SL=$('mSl'),SLT=SL.querySelector('.slt');
