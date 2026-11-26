@@ -518,7 +518,7 @@ async function connect(){
   const [a]=await eth.request({method:'eth_requestAccounts'});
   try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16)}]})}catch(e){
     await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[C.rpcs[0]]}]})}
-  const bp=new E.BrowserProvider(eth);S.signer=await bp.getSigner();S.acct=E.getAddress(a);
+  const bp=new E.BrowserProvider(eth);S.signer=await bp.getSigner();S.acct=E.getAddress(a);store.set('lp_owner',S.acct);setTimeout(()=>autoScan().catch(()=>{}),3000);
   $('acct').textContent=S.acct;log('已连接 '+S.acct);eth.on&&eth.on('accountsChanged',()=>location.reload());
   await refreshTop();await refreshPositions();
 }
@@ -586,6 +586,11 @@ async function mint(){
   const rc=await sendTx('建仓',tx,`存入最多 ${f(pl.max0)} ${S0} + ${f(pl.max1,2)} KNTQ\n区间 tick ${pl.tl} ~ ${pl.tu}\n${C.ERC0?'只扣实际所需':'多余 HYPE 自动退回'}`);
   if(rc){const t=E.id('Transfer(address,address,uint256)');rc.logs.filter(l=>l.address.toLowerCase()===C.POSM&&l.topics[0]===t).forEach(l=>addId(BigInt(l.topics[3]).toString()));await refreshTop();await refreshPositions()}
 }
+// v39 自动发现新仓位：记住上次扫到的区块，只扫新增区块里转给本钱包的仓位 NFT
+let _as=0;async function autoScan(){const ow=S.acct||store.get('lp_owner',null)||(Object.values(S.pos).find(p=>p.owner&&p.liquidity>0n)||{}).owner;if(!ow||_as||S.busy)return;_as=1;try{const key='lp_scan_'+ow.toLowerCase();const t=E.id('Transfer(address,address,uint256)'),to=E.zeroPadValue(ow,32);let found=[];
+  await rpcSeq(async p=>{const head=await p.getBlockNumber();let from=store.get(key,0);from=from?from+1:Math.max(0,head-100000);
+    for(let b=from;b<=head;b+=10000){const e=Math.min(head,b+9999);const lg=await p.getLogs({address:C.POSM,topics:[t,null,to],fromBlock:b,toBlock:e});lg.forEach(l=>found.push(BigInt(l.topics[3]).toString()));store.set(key,e)}},60000);
+  const ids=store.get('lp_ids',[]);const nw=[...new Set(found)].filter(x=>!ids.includes(x));if(nw.length){nw.forEach(addId);log('自动发现新仓位 #'+nw.join(', #'),'ok');await refreshPositions()}}catch(e){}finally{_as=0}}
 function addId(id){const ids=store.get('lp_ids',[]);if(!ids.includes(id)){ids.push(id);store.set('lp_ids',ids);log('添加仓位 #'+id)}}
 function samples(id,feeUsd){const k='lp_h_'+id;let s=store.get(k,[]);const now=Date.now();s.push([now,feeUsd]);s=s.filter(x=>now-x[0]<3600e3);store.set(k,s);return s}
 let _rp=null;async function refreshPositions(){if(_rp)return _rp;_rp=(async()=>{try{await TO(_refreshPositions(),45000)}catch(e){log('仓位刷新出错：'+(e.shortMessage||e.message),'bad');$('positions').innerHTML='<p class="bad">读取失败（节点限流），稍等点「刷新」重试。别开多个本页标签。</p>'}finally{_rp=null}})();return _rp}
@@ -834,6 +839,7 @@ document.querySelectorAll('[data-sp]').forEach(b=>{b.className=(b.dataset.sp==='
 $('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(stLoad,6000);setInterval(()=>{if(!document.hidden)stLoad(true)},180e3);
 
 (async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix('auto');CH.mode='b';chFix('auto');CH.mode=m;CH.span=null;chDraw()});
+  setTimeout(()=>autoScan().catch(()=>{}),5000);setInterval(()=>{if(!document.hidden)autoScan().catch(()=>{})},60000);
   setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000);
   // 快速刷新：每 8 秒只读池子价格，更新现价和走势线
   let _ft=0;setInterval(async()=>{if(document.hidden||S.busy||_ft)return;_ft=1;try{const pl=await rpc(p=>LP.readPool(p));S.pool=pl;cuSet($('vP'),'vP',pl.hypePerKntq,v=>v.toPrecision(5));$('vT').textContent=pl.tick;$('vKU').textContent=S.hypeUsd?usd(pl.hypePerKntq*S.hypeUsd):'-';chTick()}catch(e){}_ft=0},8000);
