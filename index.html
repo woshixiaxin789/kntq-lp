@@ -27,6 +27,7 @@ label{display:inline-flex;align-items:center;gap:6px}
 input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;background:#2a2c30;border:0;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);min-width:200px}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#d8d5cd;border:1px solid rgba(0,0,0,.3);box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:pointer}
 input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#d8d5cd;border:0;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.ptot{background:var(--card2);border:1px solid rgba(201,178,138,.35);border-radius:14px;padding:14px 16px;margin-top:10px}.ptot b{display:block;font-size:12px;color:var(--mut);font-weight:500;letter-spacing:.3px}.ptot .big{font-size:34px;font-weight:700;color:var(--acc);font-variant-numeric:tabular-nums;line-height:1.15;margin:4px 0}.ptot .big small{font-size:15px;color:var(--mut);font-weight:500;margin-left:6px}.ptot .sub{font-size:13px;color:var(--txt);font-variant-numeric:tabular-nums}.ptot .sub span{color:var(--mut)}
 .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
 .kv div,.pos div{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .kv b,.pos b{display:block;font-size:11.5px;color:var(--mut);font-weight:500;margin-bottom:2px;letter-spacing:.3px}
@@ -81,7 +82,7 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 <select id="sort"><option value="val">按价值</option><option value="fee">按待领</option><option value="apr">按年化</option><option value="id">按编号</option></select>
 <label class="mut"><input type="checkbox" id="hideEmpty" checked style="width:auto"> 隐藏已撤空</label></div>
 <div class="row"><button class="alt" id="bScan">扫描链上仓位</button><input id="iAdd" placeholder="编号，如 613,617" style="width:150px"><button class="alt" id="bAdd">添加</button><button class="alt" id="bRef">刷新</button></div>
-<div id="positions"><div class="skc"><i class="sk" style="width:40%"></i><i class="sk" style="width:100%;height:6px"></i><div class="skg"><i class="sk"></i><i class="sk"></i><i class="sk"></i></div></div><div class="skc"><i class="sk" style="width:40%"></i><i class="sk" style="width:100%;height:6px"></i><div class="skg"><i class="sk"></i><i class="sk"></i><i class="sk"></i></div></div></div></div>
+<div id="posTot" class="ptot" style="display:none"></div><div id="positions"><div class="skc"><i class="sk" style="width:40%"></i><i class="sk" style="width:100%;height:6px"></i><div class="skg"><i class="sk"></i><i class="sk"></i><i class="sk"></i></div></div><div class="skc"><i class="sk" style="width:40%"></i><i class="sk" style="width:100%;height:6px"></i><div class="skg"><i class="sk"></i><i class="sk"></i><i class="sk"></i></div></div></div></div>
 
 <div class="card"><div class="row"><h2 class="grow">成交量与份额</h2><span id="stSt" class="mut"></span></div>
 <div class="row" style="margin-bottom:8px"><button class="alt" data-sh="6">6h</button><button data-sh="12">12h</button><button class="alt" data-sh="24">24h</button><span class="grow"></span><button class="alt" id="stRef">刷新</button></div>
@@ -596,6 +597,10 @@ async function _refreshPositions(){
     const val=valH*hu,fee=feeH*hu; // 美元；取不到美元价时 hu=0，界面改显示 HYPE
     const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
     out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
+  {const act=out.filter(p=>p.liquidity>0n||p.feeH>=0.001);const tv=act.reduce((a,p)=>a+p.valH,0),tf=act.reduce((a,p)=>a+p.feeH,0),t0=act.reduce((a,p)=>a+Number(E.formatEther(p.amount0)),0),t1=act.reduce((a,p)=>a+Number(E.formatEther(p.amount1)),0),nin=act.filter(p=>p.liquidity>0n&&p.inRange).length,nl=act.filter(p=>p.liquidity>0n).length;const el=$('posTot');
+   if(!act.length){el.style.display='none'}else{el.style.display='';if(!el.dataset.ok){el.innerHTML='<b>LP 合计（本金 + 待领，HYPE 本位）</b><div class="big"><span id="ptV"></span><small>HYPE</small></div><div class="sub">本金 <span id="ptP"></span> · 待领 <span id="ptF"></span><br><span id="ptN"></span></div>';el.dataset.ok=1}
+   const h4=v=>v.toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});cuSet($('ptV'),'ptV',tv+tf,h4);$('ptP').textContent=h4(tv)+' HYPE';$('ptF').textContent=h4(tf)+' HYPE';
+   $('ptN').textContent=`${nl} 个仓位，${nin} 个在区间内 · 含 ${t0.toFixed(3)} HYPE + ${Math.round(t1).toLocaleString()} KNTQ${hu?' · ≈'+usd((tv+tf)*hu):''}`}}
   const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};S._posLoaded=1;
   $('positions').innerHTML=out.filter(p=>!($('hideEmpty').checked&&p.liquidity===0n&&p.fee<0.001)).map(p=>{S.pos[p.id]=p;
     const mine=S.acct&&p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase();const pl=t=>(1/Math.pow(1.0001,t)).toPrecision(4);
