@@ -206,7 +206,7 @@ async function readTick(pm, ss, t) {
   const ts = E.keccak256(ab.encode(['int24', 'bytes32'], [t, slotAdd(ss, 4)]));
   const w = await pm['extsload(bytes32,uint256)'](ts, 3); return { o0: BigInt(w[1]), o1: BigInt(w[2]) };
 }
-async function readPosition(p, tokenId, pool) {
+async function readPosition(p, tokenId, pool, _retry) {
   const posm = new E.Contract(C.POSM, POSM_ABI, p);
   const [[key, info], liq, owner] = await Promise.all([posm.getPoolAndPositionInfo(tokenId), posm.getPositionLiquidity(tokenId), posm.ownerOf(tokenId).catch(() => null)]);
   const tl = s24(info >> 8n), tu = s24(info >> 32n);
@@ -222,8 +222,13 @@ async function readPosition(p, tokenId, pool) {
   const L = BigInt(liq);
   const inside = (g, ol, ou) => { let below = pool.tick >= tl ? ol : g - ol, above = pool.tick < tu ? ou : g - ou; return ((g - below - above) % M256 + M256) % M256; };
   const in0 = inside(pool.fg0, lo.o0, up.o0), in1 = inside(pool.fg1, lo.o1, up.o1);
-  const fee0 = (((in0 - BigInt(pw[1])) % M256 + M256) % M256) * L / Q128;
-  const fee1 = (((in1 - BigInt(pw[2])) % M256 + M256) % M256) * L / Q128;
+  const d0 = ((in0 - BigInt(pw[1])) % M256 + M256) % M256, d1 = ((in1 - BigInt(pw[2])) % M256 + M256) % M256;
+  if (d0 > M256 / 2n || d1 > M256 / 2n) { // reads from different blocks/nodes: delta wrapped negative
+    if (!_retry) return readPosition(p, tokenId, null, true);
+    throw new Error('fee read inconsistent (stale node), keep last');
+  }
+  const fee0 = d0 * L / Q128;
+  const fee1 = d1 * L / Q128;
   const { a0, a1 } = amountsForLiquidity(pool.sqrtP, sqrtAt(tl), sqrtAt(tu), L);
   return { sqrtP: pool.sqrtP, tokenId, isOurPool, owner, poolName: pp.NAME, poolK: Object.keys(POOLS).find(k => POOLS[k] === pp), t0: pp.T0, sym0: pp.SYM0, levy: pp.LEVY, otherPool: !same, tickLower: tl, tickUpper: tu, liquidity: L, amount0: a0, amount1: a1, fee0, fee1, inRange: pool.tick >= tl && pool.tick < tu };
 }
@@ -609,7 +614,7 @@ async function _refreshPositions(){
     const lk=1-(p.levy||0);const valH=Number(E.formatEther(p.amount0))+Number(E.formatEther(p.amount1))*kp,feeH=(Number(E.formatEther(p.fee0))+Number(E.formatEther(p.fee1))*kp)*lk;
     const val=valH*hu,fee=feeH*hu; // 美元；取不到美元价时 hu=0，界面改显示 HYPE
     const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
-    out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
+    out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){if(S.pos&&S.pos[id])out.push(S.pos[id]);log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
   {const act=out.filter(p=>p.liquidity>0n||p.feeH>=0.001);const tv=act.reduce((a,p)=>a+p.valH,0),tf=act.reduce((a,p)=>a+p.feeH,0),t0=act.reduce((a,p)=>a+Number(E.formatEther(p.amount0)),0),t1=act.reduce((a,p)=>a+Number(E.formatEther(p.amount1)),0),nin=act.filter(p=>p.liquidity>0n&&p.inRange).length,nl=act.filter(p=>p.liquidity>0n).length;const el=$('posTot');
    if(!act.length){el.style.display='none'}else{el.style.display='';if(!el.dataset.ok){el.innerHTML='<b>LP 合计（本金 + 待领，HYPE 本位）</b><div class="big"><span id="ptV"></span><small>HYPE</small></div><div class="sub">本金 <span id="ptP"></span> · 待领 <span id="ptF"></span><br><span id="ptN"></span></div><div class="row" style="margin-top:8px"><button class="alt" onclick="collectAll()">一键领取全部手续费</button><button class="red" onclick="removeAllPos()">一键撤掉全部仓位</button></div>';el.dataset.ok=1}
    const h4=v=>v.toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});cuSet($('ptV'),'ptV',tv+tf,h4);$('ptP').textContent=h4(tv)+' HYPE';$('ptF').textContent=h4(tf)+' HYPE';
