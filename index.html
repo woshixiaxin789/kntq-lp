@@ -603,7 +603,7 @@ async function _refreshPositions(){
     const s=samples(id,feeH);let apr=null,psH=null;const o=s[0];if(o&&s.length>1&&Date.now()-o[0]>30e3&&feeH>=o[1]){psH=(feeH-o[1])/((Date.now()-o[0])/1000);apr=valH>0?psH*31536000/valH*100:null}
     out.push({...p,id,val:valH,fee:feeH,valH,feeH,apr,psH})}catch(e){log('读取仓位 #'+id+' 失败：'+(e.shortMessage||e.message),'bad')}}
   {const act=out.filter(p=>p.liquidity>0n||p.feeH>=0.001);const tv=act.reduce((a,p)=>a+p.valH,0),tf=act.reduce((a,p)=>a+p.feeH,0),t0=act.reduce((a,p)=>a+Number(E.formatEther(p.amount0)),0),t1=act.reduce((a,p)=>a+Number(E.formatEther(p.amount1)),0),nin=act.filter(p=>p.liquidity>0n&&p.inRange).length,nl=act.filter(p=>p.liquidity>0n).length;const el=$('posTot');
-   if(!act.length){el.style.display='none'}else{el.style.display='';if(!el.dataset.ok){el.innerHTML='<b>LP 合计（本金 + 待领，HYPE 本位）</b><div class="big"><span id="ptV"></span><small>HYPE</small></div><div class="sub">本金 <span id="ptP"></span> · 待领 <span id="ptF"></span><br><span id="ptN"></span></div><div class="row" style="margin-top:8px"><button class="alt" onclick="collectAll()">一键领取全部手续费</button></div>';el.dataset.ok=1}
+   if(!act.length){el.style.display='none'}else{el.style.display='';if(!el.dataset.ok){el.innerHTML='<b>LP 合计（本金 + 待领，HYPE 本位）</b><div class="big"><span id="ptV"></span><small>HYPE</small></div><div class="sub">本金 <span id="ptP"></span> · 待领 <span id="ptF"></span><br><span id="ptN"></span></div><div class="row" style="margin-top:8px"><button class="alt" onclick="collectAll()">一键领取全部手续费</button><button class="red" onclick="removeAllPos()">一键撤掉全部仓位</button></div>';el.dataset.ok=1}
    const h4=v=>v.toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});cuSet($('ptV'),'ptV',tv+tf,h4);$('ptP').textContent=h4(tv)+' HYPE';$('ptF').textContent=h4(tf)+' HYPE';
    $('ptN').textContent=`${nl} 个仓位，${nin} 个在区间内 · 含 ${t0.toFixed(3)} HYPE + ${Math.round(t1).toLocaleString()} KNTQ${hu?' · ≈'+usd((tv+tf)*hu):''}`}}
   const k=$('sort').value;out.sort((a,b)=>k==='id'?Number(b.id)-Number(a.id):k==='fee'?b.fee-a.fee:k==='apr'?(b.apr||0)-(a.apr||0):b.val-a.val);S.pos={};S._posLoaded=1;
@@ -635,6 +635,13 @@ async function collect(id){const p=S.pos[id];if(p.fee0===0n&&p.fee1===0n)return 
     if(!await ensureP2(C.KNTQ,u.a1+10n,'posm')||!await ensureP2(C.WHYPE,u.a0+10n,'posm'))return;
     return await sendTx('领取手续费 #'+id,tx,`Nest 池领取：同一笔里撤出 ${(Number(dl)/Number(p.liquidity)*100).toFixed(3)}% 流动性再原样加回（hook 要求本金够付抽成），仓位不变\n到手约 ${f(net(p,p.fee0),5)} WHYPE + ${f(net(p,p.fee1),3)} KNTQ（已扣 Nest 10%）`)&&(await refreshTop(),await refreshPositions())}
   await sendTx('领取手续费 #'+id,LP.buildCollect({tokenId:BigInt(id),owner:S.acct,t0:p.t0}),`领取约 ${f(p.fee0,5)} ${p.sym0} + ${f(p.fee1,3)} KNTQ 到 ${S.acct}`)&&(await refreshTop(),await refreshPositions())}
+async function removeAllPos(){if(!S.acct)return alert('先连接钱包');const slip=BigInt(Math.round(+$('iSlip').value*100));
+  const all=Object.values(S.pos).filter(p=>p.owner&&p.owner.toLowerCase()===S.acct.toLowerCase()&&p.liquidity>0n);if(!all.length)return alert('当前钱包没有可撤的仓位');
+  const stuck=all.filter(p=>p.levy&&LP.collectDl(p,p.sqrtP)==null),ok=all.filter(p=>!stuck.includes(p));if(!ok.length)return alert('只剩 Nest 池仓位，且在区间外有待领，hook 会让撤池失败，等价格回到区间');
+  const by={};let k=0n,mk=0n;const mins=ok.map(p=>{const m=minOut(p,slip);const s0=p.sym0||'HYPE';by[s0]=by[s0]||[0n,0n];by[s0][0]+=p.amount0+net(p,p.fee0);by[s0][1]+=m.min0;k+=p.amount1+net(p,p.fee1);mk+=m.min1;return {tokenId:BigInt(p.id),L:p.liquidity,min0:m.min0,min1:m.min1,t0:p.t0}});
+  if(!confirm('确定撤掉 '+ok.map(p=>'#'+p.id).join(' ')+' 的全部流动性？'))return;
+  const est=Object.entries(by).map(([s0,v])=>`${f(v[0])} ${s0}`).join(' + ')+` + ${f(k,2)} KNTQ`,mn=Object.entries(by).map(([s0,v])=>`${f(v[1])} ${s0}`).join(' + ')+` + ${f(mk,2)} KNTQ`;
+  await sendTx('一键撤池 '+ok.length+' 个仓位',LP.buildRemoveMany(mins,S.acct),`一笔交易撤出全部流动性并领取手续费\n约 ${est}\n最少到账 ${mn}（滑点 ${$('iSlip').value}%）${stuck.length?'\nNest 池 '+stuck.map(p=>'#'+p.id).join(' ')+' 在区间外有待领，hook 会失败，没放进来':''}`)&&(await refreshTop(),await refreshPositions())}
 async function removeAll(id){const p=S.pos[id];const slip=BigInt(Math.round(+$('iSlip').value*100));
   const {min0,min1}=minOut(p,slip);const bad=p.levy&&LP.collectDl(p,p.sqrtP)==null;
   if(bad&&!confirm('这个仓位在区间外，且另一种币还有待领手续费，Nest hook 大概率会让撤池失败（会先模拟，不会白付 gas）。仍要试？'))return;
