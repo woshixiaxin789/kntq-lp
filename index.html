@@ -116,6 +116,14 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 <div class="row" style="margin-top:6px">新区间 KNTQ 价格 下 <input id="mLo" type="number" step="any" value="0.005197" style="width:95px"> 上 <input id="mHi" type="number" step="any" value="0.006606" style="width:95px"> HYPE</div>
 <div class="row" style="margin-top:6px"><label style="margin-right:8px"><input type="checkbox" id="mAero" checked> 换币走 Aero 池（最深，费约 0.41%）</label>留 gas <input id="mGas" type="number" step="any" value="0.3" style="width:60px"> HYPE <button class="alt" id="mCalc">预估</button><button id="mGo">开始移仓</button></div>
 <div id="mInfo" class="mut" style="margin-top:6px"></div></div>
+<div class="card"><div class="row"><h2 class="grow">跨链（官方桥）</h2><button class="alt" id="brRef">刷新余额</button></div>
+<div class="row"><button data-brd="in">HyperEVM → Elysium</button><button data-brd="out" class="alt">Elysium → HyperEVM</button></div>
+<div class="row" style="margin-top:8px"><button data-bra="HYPE">HYPE</button><button data-bra="KNTQ" class="alt">KNTQ</button></div>
+<div class="kv" id="brBal"><div><b>HyperEVM HYPE</b>-</div><div><b>HyperEVM KNTQ</b>-</div><div><b>Elysium HYPE</b>-</div><div><b>Elysium KNTQ</b>-</div></div>
+<div class="row" style="margin-top:10px"><input id="brAmt" type="number" step="any" placeholder="数量" style="width:140px"><button class="alt" id="brMax">全部</button><button id="brGo">跨到 Elysium</button></div>
+<div id="brHint" class="vd"></div>
+<div class="row" style="margin-top:12px"><b class="grow">出链待领取</b><button class="alt" id="brScan">查询</button></div>
+<div id="brList" class="mut" style="margin-top:6px">点「查询」看这个地址跨回 HyperEVM 的记录</div></div>
 <div class="card"><h2>日志</h2><div id="log"></div><div class="row" style="margin-top:6px"><button class="alt" id="bExp">导出日志/仓位</button></div></div>
 <p class="mut">合约：PositionManager 0x1d1c51b9…e518 · PoolManager 0xe2e105d3…23f1 · Permit2 0x0000…78BA3 · KNTQ 0xe45a355d…acf0<span class="avrOnly" style="display:none"> · WHYPE 0xba876237…5e81 · Nest AVR hook 0xd4702028…BDe3（UUPS 可升级，可暂停交易）</span>。所有交易先在链上模拟，再弹窗给你确认，钱包签名；失败不会自动重发、不会自动放宽滑点。自制工具，风险自负。</p>
 </div>
@@ -518,7 +526,7 @@ async function connect(){
   const [a]=await eth.request({method:'eth_requestAccounts'});
   try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16)}]})}catch(e){
     await eth.request({method:'wallet_addEthereumChain',params:[{chainId:'0x'+C.chainId.toString(16),chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[C.rpcs[0]]}]})}
-  const bp=new E.BrowserProvider(eth);S.signer=await bp.getSigner();S.acct=E.getAddress(a);store.set('lp_owner',S.acct);setTimeout(()=>autoScan().catch(()=>{}),3000);
+  const bp=new E.BrowserProvider(eth);S.signer=await bp.getSigner();S.acct=E.getAddress(a);store.set('lp_owner',S.acct);setTimeout(()=>autoScan().catch(()=>{}),3000);BR.balances().catch(()=>{});
   $('acct').textContent=S.acct;log('已连接 '+S.acct);eth.on&&eth.on('accountsChanged',()=>location.reload());
   await refreshTop();await refreshPositions();
 }
@@ -851,6 +859,136 @@ document.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{ST.hours=+b.dat
 document.querySelectorAll('[data-sp]').forEach(b=>{b.className=(b.dataset.sp==='aero')===ST.aero?'':'alt';b.onclick=()=>{ST.aero=b.dataset.sp==='aero';store.set('st_aero',ST.aero);document.querySelectorAll('[data-sp]').forEach(x=>x.className=x===b?'':'alt');stLoad()}});
 $('stRef').onclick=stLoad;window.addEventListener('resize',stDraw);setTimeout(stLoad,6000);setInterval(()=>{if(!document.hidden)stLoad(true)},180e3);
 
+// 官方桥：HYPE / KNTQ 在 HyperEVM(999) ↔ Elysium(99901)。依赖 app 里的 E,C,S,$,f,log,confirmBox,store,TO
+const BR=(()=>{
+const A={
+  H_ID:999, E_ID:99901,
+  H_RPCS:['https://rpc.hypurrscan.io','https://rpc.hyperliquid.xyz/evm','https://hyperliquid.drpc.org'],
+  INBOX:'0xce59f8B65ad41C9DAE4c07A0571a39824bD92cff', OUTBOX:'0xec6b106dfa14428fe5eec2a4065a7be599f02728',
+  H_ROUTER:'0x5D24f760DD7664b4214bDD4B04a3f62B9edd68c0', H_GW:'0xd97B30dE0bA0C2eAeE942afce77530e06c5F122c',
+  E_ROUTER:'0x61EbbC3A29f1970aF2Ce862bA9c5364832E14d17', E_GW:'0x5DC84e4Cb0F9082246E92a5585C5395592B1aF1f',
+  ARBSYS:'0x0000000000000000000000000000000000000064', NODEIF:'0x00000000000000000000000000000000000000C8',
+  KNTQ_H:'0x000000000000780555bD0BCA3791f89f9542c2d6', KNTQ_E:'0xe45a355d9e9cAd2aD85F2d03E3eE3102A036acF0',
+};
+const I=new E.Interface([
+  'function depositEth() payable returns (uint256)',
+  'function outboundTransfer(address token,address to,uint256 amount,uint256 maxGas,uint256 gasPriceBid,bytes data) payable returns (bytes)',
+  'function withdrawEth(address destination) payable returns (uint256)',
+  'function approve(address,uint256) returns (bool)',
+  'function allowance(address,address) view returns (uint256)',
+  'function balanceOf(address) view returns (uint256)',
+  'function executeTransaction(bytes32[] proof,uint256 index,address l2Sender,address to,uint256 l2Block,uint256 l1Block,uint256 l2Timestamp,uint256 value,bytes data)',
+  'function isSpent(uint256) view returns (bool)',
+  'function constructOutboxProof(uint64 size,uint64 leaf) view returns (bytes32 send,bytes32 root,bytes32[] proof)',
+]);
+const T_L2L1=E.id('L2ToL1Tx(address,address,uint256,uint256,uint256,uint256,uint256,uint256,bytes)');
+const T_WI=E.id('WithdrawalInitiated(address,address,address,uint256,uint256,uint256)');
+const T_SRU=E.id('SendRootUpdated(bytes32,bytes32)');
+const D=E.AbiCoder.defaultAbiCoder();
+const hp=i=>new E.JsonRpcProvider(A.H_RPCS[i],A.H_ID,{staticNetwork:true,batchMaxCount:1});
+const ep=i=>LP.provider(i);
+let HI=0;
+async function hrpc(fn,ms=10000){let last;for(let k=0;k<A.H_RPCS.length*2;k++){const i=(HI+k)%A.H_RPCS.length;try{const r=await TO(fn(hp(i)),ms);HI=i;return r}catch(e){last=e;await new Promise(r=>setTimeout(r,400))}}throw last}
+async function erpc(fn,ms=10000){let last;for(let i=0;i<C.rpcs.length;i++){try{return await TO(fn(ep(i)),ms)}catch(e){last=e}}throw last}
+const call=(p,to,fn,args)=>p.call({to,data:I.encodeFunctionData(fn,args)}).then(r=>I.decodeFunctionResult(fn,r));
+const B={dir:'in',asset:'HYPE',bal:null,wd:[]};
+const dt=ts=>{const d=new Date(ts*1000);return (d.getMonth()+1)+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+
+async function balances(){if(!S.acct)return;const u=S.acct;
+  const [hH,hK,eH,eK]=await Promise.all([hrpc(p=>p.getBalance(u)),hrpc(p=>call(p,A.KNTQ_H,'balanceOf',[u]).then(r=>r[0])),erpc(p=>p.getBalance(u)),erpc(p=>call(p,A.KNTQ_E,'balanceOf',[u]).then(r=>r[0]))]);
+  B.bal={hH,hK,eH,eK};
+  $('brBal').innerHTML=`<div><b>HyperEVM HYPE</b>${f(hH,4)}</div><div><b>HyperEVM KNTQ</b>${f(hK,2)}</div><div><b>Elysium HYPE</b>${f(eH,4)}</div><div><b>Elysium KNTQ</b>${f(eK,2)}</div>`;
+  hint()}
+function src(){if(!B.bal)return 0n;return B.dir==='in'?(B.asset==='HYPE'?B.bal.hH:B.bal.hK):(B.asset==='HYPE'?B.bal.eH:B.bal.eK)}
+function hint(){const inn=B.dir==='in';
+  document.querySelectorAll('[data-brd]').forEach(b=>b.classList.toggle('alt',b.dataset.brd!==B.dir));
+  document.querySelectorAll('[data-bra]').forEach(b=>b.classList.toggle('alt',b.dataset.bra!==B.asset));
+  $('brGo').textContent=inn?'跨到 Elysium':'跨回 HyperEVM';
+  $('brHint').innerHTML=(inn
+    ?`从 HyperEVM 跨进 Elysium，1:1，一般 1 分钟内到账。钱包会先切到 HyperEVM（999）签名，完事切回 Elysium。${B.asset==='KNTQ'?'KNTQ 第一次要先授权网关，另付约 0.001 HYPE 投递费（多的退到 Elysium）。':'HyperEVM 上要留一点 HYPE 付 gas。'}`
+    :`从 Elysium 跨回 HyperEVM，官方 1:1，先在 Elysium 烧掉，<b>约 1 天后</b>才能在 HyperEVM 领。领取那一步要 HyperEVM 上有一点 HYPE 付 gas（约 0.0005）。想快就别用这个。`)
+    +(B.bal?`<br><span class="mut">可用 ${f(src(),B.asset==='HYPE'?4:2)} ${B.asset}</span>`:'')}
+
+// 切链 + 发交易（每笔先模拟，弹窗滑动确认）
+async function sw(id){const eth=window.ethereum;const hex='0x'+id.toString(16);
+  try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:hex}]})}catch(e){
+    if(id===A.H_ID)await eth.request({method:'wallet_addEthereumChain',params:[{chainId:hex,chainName:'HyperEVM',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[A.H_RPCS[0]],blockExplorerUrls:['https://hyperevmscan.io']}]});
+    else await eth.request({method:'wallet_addEthereumChain',params:[{chainId:hex,chainName:'Elysium',nativeCurrency:{name:'HYPE',symbol:'HYPE',decimals:18},rpcUrls:[C.rpcs[0]]}]})}
+  const bp=new E.BrowserProvider(eth);const n=await bp.getNetwork();if(Number(n.chainId)!==id)throw new Error('钱包没切到链 '+id);return await bp.getSigner()}
+async function send(chain,title,tx,desc){const H=chain===A.H_ID,R=H?hrpc:erpc;S.busy=true;let swd=false;
+  try{let gas;try{gas=await R(p=>p.estimateGas({...tx,from:S.acct}))}catch(e){const m=e.shortMessage||e.message;log('模拟失败：'+title+' '+m,'bad');alert('模拟失败，没有发送：\n'+m);return null}
+  if(!await confirmBox(title,desc+`\n\n链：${H?'HyperEVM 999':'Elysium 99901'}\n模拟通过，预估 gas ${gas}\n发送 HYPE：${f(tx.value||0n,6)}`)){log('取消：'+title);return null}
+  let signer;try{signer=await sw(chain);swd=true}catch(e){alert('切链失败：'+(e.shortMessage||e.message));return null}
+  let hash;try{log('等钱包签名：'+title);const r=await signer.sendTransaction({...tx,gasLimit:gas*13n/10n});hash=r.hash}catch(e){log('钱包没发出：'+title+' '+(e.shortMessage||e.message),'bad');alert('钱包没发出：\n'+(e.shortMessage||e.message));return null}
+  log(`已发送 ${title} ${hash}`);const t0=Date.now();
+  while(Date.now()-t0<240000){await new Promise(r=>setTimeout(r,2500));try{const rc=await R(p=>p.getTransactionReceipt(hash),6000);if(rc){const ok=rc.status===1;log(`${title} ${ok?'成功':'失败'} ${hash}`,ok?'ok':'bad');if(!ok)alert(title+' 链上失败');return ok?rc:null}}catch(e){}}
+  log(`${title} 4 分钟没确认 ${hash}，别重复点`,'bad');return null}
+  finally{S.busy=false;if(chain===A.H_ID&&swd){try{const s=await sw(A.E_ID);S.signer=s}catch(e){log('没切回 Elysium，请在钱包里手动切回','bad')}}}}
+
+async function go(){if(!S.acct)return alert('先连接钱包');await balances();
+  const v=$('brAmt').value.trim();if(!v)return alert('填数量');let amt;try{amt=E.parseEther(v)}catch{return alert('数量格式不对')}
+  if(!(amt>0n))return alert('数量要大于 0');const have=src();if(amt>have)return alert('余额不够，只有 '+f(have,4));
+  const u=S.acct,nm=B.asset;
+  if(B.dir==='in'){
+    if(nm==='HYPE'){if(have-amt<E.parseEther('0.002')&&!confirm('HyperEVM 上几乎不剩 HYPE 付 gas，继续？'))return;
+      const rc=await send(A.H_ID,'跨链 HYPE → Elysium',{to:A.INBOX,data:I.encodeFunctionData('depositEth',[]),value:amt},`官方 Inbox.depositEth()\n${f(amt,6)} HYPE 从 HyperEVM 进 Elysium，到同一地址 ${u}\n一般 1 分钟内到账`);
+      if(rc){log('HYPE 已在 HyperEVM 发出，等 Elysium 到账…');watchIn('HYPE',B.bal.eH)}}
+    else{const al=(await hrpc(p=>call(p,A.KNTQ_H,'allowance',[u,A.H_GW])))[0];
+      if(al<amt){if(!await send(A.H_ID,'授权 KNTQ 给官方桥网关',{to:A.KNTQ_H,data:I.encodeFunctionData('approve',[A.H_GW,E.MaxUint256])},`HyperEVM 上 KNTQ.approve(官方标准网关 ${A.H_GW}, 无限)\n一次性`))return}
+      const gp=(await erpc(p=>p.getFeeData())).gasPrice||500000000n;let bid=gp*3n;if(bid<1000000000n)bid=1000000000n;
+      const maxGas=300000n,sub=400000000000000n,fee=sub+maxGas*bid;
+      const data=I.encodeFunctionData('outboundTransfer',[A.KNTQ_H,u,amt,maxGas,bid,D.encode(['uint256','bytes'],[sub,'0x'])]);
+      const rc=await send(A.H_ID,'跨链 KNTQ → Elysium',{to:A.H_ROUTER,data,value:fee},`官方路由 outboundTransfer\n${f(amt,2)} KNTQ 从 HyperEVM 锁进网关，在 Elysium 1:1 铸给 ${u}\n投递费 ${f(fee,6)} HYPE（Elysium gas 出价 ${(Number(bid)/1e9).toFixed(2)} gwei，多的退到 Elysium）\n一般 1 分钟内到账；没到的话用 redeem 页兑付`);
+      if(rc){log('KNTQ 已在 HyperEVM 锁定，等 Elysium 到账…');watchIn('KNTQ',B.bal.eK)}}
+  }else{
+    if(nm==='HYPE'){if(have-amt<E.parseEther('0.01')&&!confirm('Elysium 上几乎不剩 HYPE 付 gas，继续？'))return;
+      await send(A.E_ID,'跨回 HYPE → HyperEVM',{to:A.ARBSYS,data:I.encodeFunctionData('withdrawEth',[u]),value:amt},`ArbSys.withdrawEth(${u})\n在 Elysium 烧掉 ${f(amt,6)} HYPE\n约 1 天后在本页「待领取」里点领取，HyperEVM 到账 1:1`)}
+    else await send(A.E_ID,'跨回 KNTQ → HyperEVM',{to:A.E_ROUTER,data:I.encodeFunctionData('outboundTransfer',[A.KNTQ_H,u,amt,0n,0n,'0x'])},`官方路由 outboundTransfer\n在 Elysium 烧掉 ${f(amt,2)} KNTQ\n约 1 天后在本页「待领取」里点领取，HyperEVM 到账 1:1`);
+    setTimeout(()=>scan().catch(()=>{}),3000)}
+  await balances().catch(()=>{})}
+async function watchIn(nm,before){const t0=Date.now();while(Date.now()-t0<300000){await new Promise(r=>setTimeout(r,8000));try{await balances();const now=nm==='HYPE'?B.bal.eH:B.bal.eK;if(now>before){log(`Elysium 到账 ${nm} +${f(now-before,nm==='HYPE'?6:2)}`,'ok');refreshTop().catch(()=>{});return}}catch(e){}}
+  log(nm+' 5 分钟还没到 Elysium，去 redeem 页查一下','bad')}
+
+// 待领取：找出本地址的出链记录，判断是否已确认、已领
+async function latestConfirmed(){const hb=await hrpc(p=>p.getBlockNumber());
+  for(let b=hb;b>hb-60000;b-=1000){const L=await hrpc(p=>p.getLogs({address:A.OUTBOX,topics:[T_SRU],fromBlock:b-999,toBlock:b}),15000);
+    if(L.length){const h=L[L.length-1].topics[2];const blk=await erpc(p=>p.send('eth_getBlockByHash',[h,false]));return {size:BigInt('0x'+blk.mixHash.slice(2,18)),ts:parseInt(blk.timestamp)}}}
+  throw new Error('没读到最近的确认')}
+async function scan(){if(!S.acct)return alert('先连接钱包');$('brList').innerHTML='<span class="mut">读取中…</span>';const u=S.acct,uT=E.zeroPadValue(u,32);
+  const p0=ep(0);const head=await p0.getBlockNumber(),from=Math.max(0,head-30000000);
+  const [nat,wi]=await Promise.all([p0.getLogs({address:A.ARBSYS,topics:[T_L2L1,null,uT],fromBlock:from,toBlock:head}),p0.getLogs({address:A.E_GW,topics:[T_WI,null,uT],fromBlock:from,toBlock:head})]);
+  const items=[];
+  for(const l of nat){const d=D.decode(['address','uint256','uint256','uint256','uint256','bytes'],l.data);if(d[4]===0n)continue;items.push({asset:'HYPE',amt:d[4],pos:BigInt(l.topics[3]),caller:d[0],to:'0x'+l.topics[1].slice(26),l2b:d[1],l1b:d[2],ts:Number(d[3]),val:d[4],data:d[5],tx:l.transactionHash})}
+  for(const w of wi){const wd=D.decode(['address','uint256','uint256'],w.data);if(wd[0].toLowerCase()!==A.KNTQ_H.toLowerCase())continue;const amt=BigInt(wd[2]);const id=BigInt(w.topics[3]);
+    const L=await p0.getLogs({address:A.ARBSYS,topics:[T_L2L1,null,null,E.toBeHex(id,32)],fromBlock:w.blockNumber,toBlock:w.blockNumber});const l=L[0];if(!l)continue;
+    const d=D.decode(['address','uint256','uint256','uint256','uint256','bytes'],l.data);items.push({asset:'KNTQ',amt,pos:id,caller:d[0],to:'0x'+l.topics[1].slice(26),l2b:d[1],l1b:d[2],ts:Number(d[3]),val:d[4],data:d[5],tx:l.transactionHash})}
+  items.sort((a,b)=>b.ts-a.ts);let cf=null;try{cf=await latestConfirmed()}catch(e){log('读确认进度失败 '+e.message,'bad')}
+  for(const it of items){try{it.spent=(await hrpc(p=>call(p,A.OUTBOX,'isSpent',[it.pos])))[0]}catch(e){it.spent=null}it.ready=cf&&it.pos<cf.size}
+  B.wd=items;B.cf=cf;draw()}
+function draw(){const cf=B.cf;const it=B.wd;
+  if(!it.length){$('brList').innerHTML='<span class="mut">这个地址没有出链记录</span>';return}
+  $('brList').innerHTML=(cf?`<div class="mut">官方已确认到 ${dt(cf.ts)} 之前提出的出链</div>`:'')+it.slice(0,12).map((x,i)=>{
+    const st=x.spent?'<span class="pill">已领取</span>':x.ready?`<button data-brc="${i}">领取</button>`:`<span class="pill warn">等待中</span>`;
+    return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow">${dt(x.ts)} · ${f(x.amt,x.asset==='HYPE'?4:2)} ${x.asset}</span>${st}</div>`}).join('');
+  document.querySelectorAll('[data-brc]').forEach(b=>b.onclick=()=>claim(B.wd[+b.dataset.brc]).catch(e=>alert(e.shortMessage||e.message)))}
+async function claim(x){if(!B.cf)return alert('还没读到确认进度');
+  const pr=await erpc(p=>call(p,A.NODEIF,'constructOutboxProof',[B.cf.size,x.pos]));
+  const data=I.encodeFunctionData('executeTransaction',[[...pr[2]],x.pos,x.caller,x.to,x.l2b,x.l1b,x.ts,x.val,x.data]);
+  const rc=await send(A.H_ID,'领取出链 '+x.asset,{to:A.OUTBOX,data},`官方 Outbox.executeTransaction\n在 HyperEVM 领取 ${f(x.amt,x.asset==='HYPE'?6:2)} ${x.asset} 到 ${S.acct}\n（${dt(x.ts)} 提出的出链）`);
+  if(rc){x.spent=true;draw();balances().catch(()=>{})}}
+
+function init(){
+  document.querySelectorAll('[data-brd]').forEach(b=>b.onclick=()=>{B.dir=b.dataset.brd;hint()});
+  document.querySelectorAll('[data-bra]').forEach(b=>b.onclick=()=>{B.asset=b.dataset.bra;hint()});
+  $('brMax').onclick=async()=>{if(!S.acct)return alert('先连接钱包');await balances();let v=src();if(B.asset==='HYPE'){const keep=E.parseEther(B.dir==='in'?'0.003':'0.02');v=v>keep?v-keep:0n}$('brAmt').value=E.formatEther(v)};
+  $('brGo').onclick=()=>go().catch(e=>{log('跨链出错 '+(e.shortMessage||e.message),'bad');alert(e.shortMessage||e.message)});
+  $('brScan').onclick=()=>scan().catch(e=>{$('brList').innerHTML='<span class="bad">读取失败：'+(e.shortMessage||e.message)+'</span>'});
+  $('brRef').onclick=()=>balances().catch(e=>alert(e.shortMessage||e.message));
+  hint()}
+return {init,balances,scan,A};
+})();
+
+BR.init();
 (async()=>{hypePrice().then(()=>{if(S.pool)refreshTop().catch(()=>{})});await refreshTop().catch(e=>log('读取池子失败 '+e.message,'bad'));chDraw();loadLiq().then(loadHist);refreshPositions().then(()=>{const m=CH.mode;CH.mode='m';chFix('auto');CH.mode='b';chFix('auto');CH.mode=m;CH.span=null;chDraw()});
   setTimeout(()=>autoScan().catch(()=>{}),5000);setInterval(()=>{if(!document.hidden)autoScan().catch(()=>{})},60000);
   setInterval(async()=>{if(document.hidden||S.busy||_rp)return;hypePrice();await refreshTop().catch(()=>{});await refreshPositions().catch(()=>{});chTick()},30000);
