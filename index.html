@@ -109,7 +109,7 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 <div class="row" style="margin-bottom:6px"><span class="mut">拖动调整：</span><button data-cm="b">建仓区间</button><button class="alt" data-cm="m">移仓区间</button><span class="grow"></span><button class="alt" data-ch="1">1h</button><button data-ch="6">6h</button><button class="alt" data-ch="24">24h</button></div>
 <div style="position:relative"><canvas id="rc" style="width:100%;height:300px;display:block;touch-action:none;border-radius:12px;background:#121315;border:1px solid var(--line);box-shadow:inset 0 1px 3px rgba(0,0,0,.5)"></canvas>
 <div style="position:absolute;right:8px;bottom:8px;display:flex;gap:6px"><button class="alt" id="czIn" style="padding:4px 10px">＋</button><button class="alt" id="czOut" style="padding:4px 10px">－</button><button class="alt" id="czFit" style="padding:4px 10px">适配</button></div></div>
-<div class="row mut" style="margin:4px 0 8px">上下拖青色线改上/下限，拖中间整体平移。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
+<div class="row mut" style="margin:4px 0 8px">拖金色线改上/下限；空白处单指拖动看前后、上下，双指捏合缩放（横着捏缩时间，竖着捏缩价格），双击复原。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
 </div>
 
 <div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（两个池子都撤，含手续费）→ 在上面选的「当前池子」建仓。→ 按新区间把多出的币（KNTQ 或 HYPE）换成另一种，计入换币本身的价格冲击（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
@@ -744,7 +744,7 @@ $('bRef').onclick=()=>refreshTop().then(refreshPositions);$('sort').onchange=ref
 $('bScan').onclick=async()=>{if(!S.acct)return alert('先连接钱包');if(store.get('lp_ids',[]).length&&!confirm('已有仓位编号，通常不用再扫，扫描会占用 RPC 导致读取变慢。仍要扫描？'))return;$('bScan').disabled=true;try{const ids=await rpcSeq(p=>LP.scanPositions(p,S.acct,300000,9999,(d,t)=>$('bScan').textContent=`扫描中 ${Math.round(d/t*100)}%`),600000);ids.forEach(addId);log(`扫描完成，找到 ${ids.length} 个`)}catch(e){log('扫描失败 '+e.message,'bad')}$('bScan').disabled=false;$('bScan').textContent='扫描链上仓位';refreshPositions()};
 $('bExp').onclick=()=>{const b=new Blob([JSON.stringify({ids:store.get('lp_ids',[]),log:store.get('lp_log',[])},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='kntq_lp_backup.json';a.click()};
 // ===== 可拖动区间图表 (v35) =====
-const CH={mode:'b',hours:6,hist:null,liq:null,span:null,center:null,drag:null,loading:false,lastLiq:0};
+const CH={xz:1,xo:0,mode:'b',hours:6,hist:null,liq:null,span:null,center:null,drag:null,loading:false,lastLiq:0};
 const cv=$('rc'),cx=cv.getContext('2d');
 const chIn=()=>CH.mode==='b'?[$('bLo'),$('bHi')]:[$('mLo'),$('mHi')];
 const p2tick=p=>-Math.log(p)/Math.log(1.0001);
@@ -784,9 +784,9 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
   Object.values(S.pos||{}).filter(p=>p.liquidity>0n).forEach(p=>{cx.setLineDash([2,4]);cx.strokeStyle='rgba(212,176,106,.6)';[p.tickLower,p.tickUpper].forEach(t=>{const y=tY(t,v,h);cx.beginPath();cx.moveTo(0,y);cx.lineTo(LW,y);cx.stroke()});cx.setLineDash([])});
   // price line
   if(CH.hist&&CH.hist.pts.length){const pts=CH.hist.pts,b0=CH.hist.b0!=null?CH.hist.b0:CH.hist.head-Math.round(CH.hours*34800),b1=Math.max(CH.hist.head,pts[pts.length-1][0]);
-    const X=b=>(b-b0)/(b1-b0)*LW;cx.strokeStyle='#d8d5cd';cx.lineWidth=1.4;cx.beginPath();let lastY=null;
-    const sp=chSpikes(pts);pts.forEach((q,i)=>{if(sp.has(i))return;const x=X(q[0]),y=tY(q[1],v,h);if(i===0)cx.moveTo(x,y);else{cx.lineTo(x,lastY);cx.lineTo(x,y)}lastY=y});cx.lineTo(LW,lastY);cx.stroke();cx.lineWidth=1;
-    chAxis(b0,b1,X,h)}
+    const fs=b1-b0;CH.xz=Math.min(Math.max(CH.xz,1),40);const vs=fs/CH.xz;CH.xo=Math.min(Math.max(CH.xo,0),fs-vs);const vb1=b1-CH.xo,vb0=vb1-vs;CH._xb=[b0,b1,LW];const X=b=>(b-vb0)/(vb1-vb0)*LW;cx.save();cx.beginPath();cx.rect(0,0,LW,h);cx.clip();cx.strokeStyle='#d8d5cd';cx.lineWidth=1.4;cx.beginPath();let lastY=null;
+    const sp=chSpikes(pts);pts.forEach((q,i)=>{if(sp.has(i))return;const x=X(q[0]),y=tY(q[1],v,h);if(i===0)cx.moveTo(x,y);else{cx.lineTo(x,lastY);cx.lineTo(x,y)}lastY=y});if(CH.xo<=0)cx.lineTo(LW,lastY);cx.stroke();cx.lineWidth=1;cx.restore();
+    chAxis(vb0,vb1,X,h)}
   else{cx.fillStyle='rgba(139,138,133,.9)';cx.textAlign='left';cx.fillText(CH.loading?'读取价格走势中…':'',8,h/2)}
   // current price
   if(S.pool){const y=tY(S.pool.tick,v,h);cx.setLineDash([5,4]);cx.strokeStyle='rgba(230,227,220,.55)';cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.setLineDash([]);
@@ -812,20 +812,41 @@ function lbl(t,x,y,bg,fg,al,dn){if(dn)y+=21;cx.font='600 11.5px -apple-system,sy
 function chSet(tHi,tLo){const TS=C.TS,c=chCur();tHi=Math.max(tHi,c-SANE);tLo=Math.min(tLo,c+SANE);tHi=Math.round(tHi/TS)*TS;tLo=Math.round(tLo/TS)*TS;if(tLo-tHi<TS)return false;const [a,b]=chIn();a.value=t2p(tLo).toPrecision(5);b.value=t2p(tHi).toPrecision(5);return true}
 let _cc=null;function chAfter(){clearTimeout(_cc);_cc=setTimeout(()=>{if(CH.mode==='b'){try{store.set('lp_range',[$('bLo').value,$('bHi').value]);if(S.pool&&S.bal)$('calc').innerHTML=planText(buildPlan()).replace(/\n/g,'<br>')}catch(e){$('calc').textContent=e.message}}},150)}
 function evY(e){const rc=cv.getBoundingClientRect();return e.clientY-rc.top}
-cv.addEventListener('pointerdown',e=>{const r=chRangeTicks();if(!r)return;const {h}=chSize(),v=chView(),y=evY(e),ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);
-  let k=null;if(Math.abs(y-ya)<22&&Math.abs(y-ya)<=Math.abs(y-yb))k='hi';else if(Math.abs(y-yb)<22)k='lo';else if(y>ya&&y<yb)k='band';
-  if(!k)return;e.preventDefault();cv.setPointerCapture(e.pointerId);CH.drag={k,y0:y,a:r.tHiP,b:r.tLoP};chDraw()});
-cv.addEventListener('pointermove',e=>{if(!CH.drag)return;e.preventDefault();const {h}=chSize(),v=chView(),y=evY(e),d=CH.drag,dt=(y-d.y0)/h*(v.bot-v.top);
-  let a=d.a,b=d.b;if(d.k==='hi')a=Math.min(d.a+dt,d.b-C.TS);else if(d.k==='lo')b=Math.max(d.b+dt,d.a+C.TS);else{a+=dt;b+=dt}
-  // auto-expand view when near edge
-  if(y<12)CH.center-=CH.span*.02;if(y>h-12)CH.center+=CH.span*.02;
-  if(chSet(a,b)){chDraw();chAfter()}});
-const chEnd=e=>{if(!CH.drag)return;CH.drag=null;chDraw();chAfter()};cv.addEventListener('pointerup',chEnd);cv.addEventListener('pointercancel',chEnd);
+// 手势：拖线改区间；空白处单指拖动=平移（上下=价格，左右=时间）；双指捏合=缩放；双击=适配；电脑上滚轮缩放价格，Shift+滚轮缩放时间
+const PT=new Map();let GS=null,_lt=0;
+function gsStart(){const a=[...PT.values()];const {w,h}=chSize();
+  if(a.length>=2){const [p,q]=a;GS={k:'pinch',dx:Math.max(Math.abs(p.x-q.x),1),dy:Math.max(Math.abs(p.y-q.y),1),mx:(p.x+q.x)/2,my:(p.y+q.y)/2,span:CH.span,center:CH.center,xz:CH.xz,xo:CH.xo,w,h}}
+  else if(a.length===1){GS={k:'pan',x0:a[0].x,y0:a[0].y,center:CH.center,xo:CH.xo,w,h}}else GS=null}
+function evXY(e){const rc=cv.getBoundingClientRect();return{x:e.clientX-rc.left,y:e.clientY-rc.top}}
+cv.addEventListener('pointerdown',e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);PT.set(e.pointerId,evXY(e));chView();
+  if(PT.size===1){const now=Date.now();if(now-_lt<300){_lt=0;CH.xz=1;CH.xo=0;$('czFit').click();return}_lt=now;
+    const r=chRangeTicks();if(r){const {h}=chSize(),v=chView(),y=evY(e),ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);
+      let k=null;if(Math.abs(y-ya)<22&&Math.abs(y-ya)<=Math.abs(y-yb))k='hi';else if(Math.abs(y-yb)<22)k='lo';
+      if(k){CH.drag={k,y0:y,a:r.tHiP,b:r.tLoP};GS=null;chDraw();return}}}
+  if(CH.drag){CH.drag=null;chAfter()}gsStart()});
+cv.addEventListener('pointermove',e=>{if(!PT.has(e.pointerId))return;e.preventDefault();PT.set(e.pointerId,evXY(e));
+  if(CH.drag){const {h}=chSize(),v=chView(),y=evY(e),d=CH.drag,dt=(y-d.y0)/h*(v.bot-v.top);
+    let a=d.a,b=d.b;if(d.k==='hi')a=Math.min(d.a+dt,d.b-C.TS);else if(d.k==='lo')b=Math.max(d.b+dt,d.a+C.TS);else{a+=dt;b+=dt}
+    if(y<12)CH.center-=CH.span*.02;if(y>h-12)CH.center+=CH.span*.02;
+    if(chSet(a,b)){chDraw();chAfter()}return}
+  if(!GS)return;const g=GS,a=[...PT.values()],XB=CH._xb,fs=XB?XB[1]-XB[0]:0,LW=XB?XB[2]:g.w*.74;
+  if(g.k==='pan'&&a.length===1){const dx=a[0].x-g.x0,dy=a[0].y-g.y0;
+    CH.center=g.center-dy/g.h*CH.span;if(fs)CH.xo=g.xo+dx/LW*(fs/CH.xz);chDraw()}
+  else if(g.k==='pinch'&&a.length>=2){const [p,q]=a,dx=Math.max(Math.abs(p.x-q.x),1),dy=Math.max(Math.abs(p.y-q.y),1),mx=(p.x+q.x)/2,my=(p.y+q.y)/2;
+    if(g.dy>40){const f=g.dy/dy;const ns=Math.min(Math.max(g.span*f,400),SANE*2);const tAt=g.center-g.span/2+g.my/g.h*g.span;CH.span=ns;CH.center=tAt-(my/g.h-.5)*ns}
+    else CH.center=g.center-(my-g.my)/g.h*g.span;
+    if(fs){if(g.dx>40){const nz=Math.min(Math.max(g.xz*dx/g.dx,1),40),vs0=fs/g.xz,vs1=fs/nz,fr=Math.min(g.mx/LW,1),bAt=XB[1]-g.xo-vs0*(1-fr);CH.xz=nz;CH.xo=XB[1]-(bAt+vs1*(1-Math.min(mx/LW,1)))}
+      else CH.xo=g.xo+(mx-g.mx)/LW*(fs/g.xz)}
+    chDraw()}});
+const chEnd=e=>{if(!PT.has(e.pointerId))return;PT.delete(e.pointerId);if(CH.drag&&PT.size===0){CH.drag=null;chDraw();chAfter();return}gsStart()};
+cv.addEventListener('pointerup',chEnd);cv.addEventListener('pointercancel',chEnd);
+cv.addEventListener('wheel',e=>{e.preventDefault();chView();const f=e.deltaY>0?1.15:1/1.15;
+  if(e.shiftKey){CH.xz=Math.min(Math.max(CH.xz/f,1),40)}else{const {h}=chSize(),y=evY(e),tAt=CH.center-CH.span/2+y/h*CH.span;CH.span=Math.min(Math.max(CH.span*f,400),SANE*2);CH.center=tAt-(y/h-.5)*CH.span}chDraw()},{passive:false});
 ['bLo','bHi','mLo','mHi'].forEach(id=>$(id).addEventListener('input',()=>chDraw()));
 document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{CH.mode=b.dataset.cm;chFix();document.querySelectorAll('[data-cm]').forEach(x=>x.className=x===b?'':'alt');CH.span=null;chDraw()});
 document.querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{CH.hours=+b.dataset.ch;document.querySelectorAll('[data-ch]').forEach(x=>x.className=x===b?'':'alt');loadHist()});
 $('czIn').onclick=()=>{chView();CH.span=Math.max(400,CH.span/1.5);chDraw()};$('czOut').onclick=()=>{chView();CH.span*=1.5;chDraw()};
-$('czFit').onclick=()=>{chFix('force');CH.span=null;chDraw();chAfter()};
+$('czFit').onclick=()=>{CH.xz=1;CH.xo=0;chFix('force');CH.span=null;chDraw();chAfter()};
 async function loadLiq(){try{CH.liq=await rpc(p=>liqDist(p,LP),20000);CH.lastLiq=Date.now();
   // align segment L with pool active L (ticks outside scanned words)
   if(S.pool){const s=CH.liq.segs.find(s=>s[0]<=S.pool.tick&&S.pool.tick<s[1]);if(s){const dlt=S.pool.liquidity-s[2];CH.liq.segs.forEach(x=>x[2]+=dlt)}}chDraw()}catch(e){console.warn('liq',e)}}
