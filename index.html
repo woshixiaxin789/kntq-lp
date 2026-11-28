@@ -109,7 +109,7 @@ i.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:
 <div class="row" style="margin-bottom:6px"><span class="mut">拖动调整：</span><button data-cm="b">建仓区间</button><button class="alt" data-cm="m">移仓区间</button><span class="grow"></span><button class="alt" data-ch="1">1h</button><button data-ch="6">6h</button><button class="alt" data-ch="24">24h</button></div>
 <div style="position:relative"><canvas id="rc" style="width:100%;height:300px;display:block;touch-action:none;border-radius:12px;background:#121315;border:1px solid var(--line);box-shadow:inset 0 1px 3px rgba(0,0,0,.5)"></canvas>
 <div style="position:absolute;right:8px;bottom:8px;display:flex;gap:6px"><button class="alt" id="czIn" style="padding:4px 10px">＋</button><button class="alt" id="czOut" style="padding:4px 10px">－</button><button class="alt" id="czFit" style="padding:4px 10px">适配</button></div></div>
-<div class="row mut" style="margin:4px 0 8px">拖金色线改上/下限；空白处单指拖动看前后、上下，双指捏合缩放（横着捏缩时间，竖着捏缩价格），双击复原。右侧柱子是池子流动性分布，黄色虚线是你现有仓位。<span id="chSt"></span></div>
+<div class="row mut" style="margin:4px 0 8px">拖金色线改上/下限；空白处单指拖动看前后、上下，双指捏合缩放（横着捏缩时间，竖着捏缩价格），双击复原。右侧柱子是池子流动性分布（细线是每一格，金线是流动性变化的边界，放大后显示 tick），黄色虚线是你现有仓位。<span id="chSt"></span></div>
 </div>
 
 <div class="card"><h2>一键移仓</h2><div class="mut">撤出当前钱包全部仓位（两个池子都撤，含手续费）→ 在上面选的「当前池子」建仓。→ 按新区间把多出的币（KNTQ 或 HYPE）换成另一种，计入换币本身的价格冲击（Uniswap 官方 Universal Router）→ 全部按新区间建仓。约 3–4 次签名，每步都会先模拟。</div>
@@ -777,7 +777,14 @@ function chDraw(){const {w,h}=chSize();const v=chView();cx.clearRect(0,0,w,h);co
   // liquidity histogram (right side)
   if(CH.liq){const segs=CH.liq.segs.filter(s=>s[1]>v.top&&s[0]<v.bot&&s[2]>0n);const mx=segs.reduce((a,s)=>s[2]>a?s[2]:a,1n);
     for(const s of segs){const y1=tY(s[0],v,h),y2=tY(s[1],v,h),len=Number(s[2]*1000n/mx)/1000*(w-LW-6);
-      const inr=S.pool&&s[0]<=S.pool.tick&&S.pool.tick<s[1];cx.fillStyle=inr?'rgba(201,178,138,.6)':'rgba(165,155,191,.35)';cx.fillRect(w-len,Math.min(y1,y2),len,Math.max(1,Math.abs(y2-y1)-1))}}
+      const inr=S.pool&&s[0]<=S.pool.tick&&S.pool.tick<s[1];cx.fillStyle=inr?'rgba(201,178,138,.6)':'rgba(165,155,191,.35)';cx.fillRect(w-len,Math.min(y1,y2),len,Math.max(1,Math.abs(y2-y1)-1))}
+    // v51: 格子线（每个 tickSpacing 一格；太密时按倍数合并）+ 段边界
+    const TSp=C.TS||60,pxT=h/Math.abs(v.bot-v.top);let k=1;while(pxT*TSp*k<6)k*=2;const st=TSp*k,x0=LW+2;
+    cx.lineWidth=1;cx.strokeStyle='rgba(230,227,220,.16)';cx.beginPath();
+    for(let t=Math.ceil(Math.min(v.top,v.bot)/st)*st;t<=Math.max(v.top,v.bot);t+=st){const y=Math.round(tY(t,v,h))+.5;cx.moveTo(x0,y);cx.lineTo(w,y)}cx.stroke();
+    cx.strokeStyle='rgba(201,178,138,.55)';cx.beginPath();for(const s of segs)for(const t of[s[0],s[1]]){const y=Math.round(tY(t,v,h))+.5;cx.moveTo(x0,y);cx.lineTo(w,y)}cx.stroke();
+    if(pxT*TSp>=14){cx.fillStyle='rgba(230,227,220,.55)';cx.textAlign='left';cx.font='9px -apple-system,system-ui,sans-serif';for(let t=Math.ceil(Math.min(v.top,v.bot)/TSp)*TSp;t<=Math.max(v.top,v.bot);t+=TSp)cx.fillText(String(t),x0+2,tY(t,v,h)+6);cx.font='11px -apple-system,system-ui,sans-serif'}
+  }
   // range band
   const r=chRangeTicks();if(r){const ya=tY(r.tHiP,v,h),yb=tY(r.tLoP,v,h);cx.fillStyle='rgba(201,178,138,.08)';cx.fillRect(0,ya,w,yb-ya)}
   // my positions
